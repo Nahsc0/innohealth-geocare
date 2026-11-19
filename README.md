@@ -1,6 +1,6 @@
 # InnoHealth GeoCare
 
-A mobile-first Kaduna pilot by InnoHealth Africa Technologies Ltd. The public directory supports English and Hausa, digital-postcode validation, consent-based GPS, manual location search and MapLibre. Protected workspaces support synthetic emergency coordination, maternal referrals, administration and GIS reporting.
+A mobile-first Kaduna pilot by InnoHealth Africa Technologies Ltd. Individuals and approved partners can sign in to use the facility directory. It supports English and Hausa, digital-postcode validation, consent-based GPS, manual location search and MapLibre. Partner workspaces support synthetic emergency coordination, maternal referrals, administration and GIS reporting.
 
 **Emergency operations are sandbox-only. In Nigeria, call 112 for a real emergency.** The API has no outbound dispatch connector. The directory starts empty and only publishes sourced entries that an authorised administrator has verified.
 
@@ -32,6 +32,7 @@ Open http://localhost:3000. The API schema is at http://localhost:8000/docs. Wit
 - [Pilot user guide](docs/user-guide.md)
 - [NIPOST, NHFR, maps and data sources](docs/integrations.md)
 - [Architecture and API usage](docs/api.md)
+- [Account registration and monthly activity](docs/account-registration.md)
 - [Staging deployment and operational runbook](docs/runbook.md)
 - [Test instructions and evidence](docs/testing.md)
 - [Staging status and outstanding integrations](docs/staging-status.md)
