@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgis/postgis:16-3.5
+    environment:
+      POSTGRES_DB: geocare
+      POSTGRES_USER: geocare
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geocare -d geocare"]
+      interval: 4s
+      timeout: 4s
+      retries: 15
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://geocare:${POSTGRES_PASSWORD}@db/geocare
+      APP_ENV: staging
+    command: ["python","-m","backend.core"]
+    depends_on:
+      db:
+        condition: service_healthy
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://geocare:${POSTGRES_PASSWORD}@db/geocare
+      APP_ENV: staging
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_TILE_URL: ${NEXT_PUBLIC_TILE_URL:-}
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      - backend
+volumes:
+  pgdata:

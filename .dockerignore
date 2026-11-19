@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/__pycache__
+**/.pytest_cache
+**/.env*
+**/*.sqlite*
+**/test-results
+.git
+.github
+.venv
+.deps
+docs/screenshots

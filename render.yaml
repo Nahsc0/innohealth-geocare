@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: innohealth-geocare-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    dockerCommand: >-
+      sh -c 'python -m backend.core && exec uvicorn backend.main:app --host 0.0.0.0 --port "$PORT" --no-access-log'
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: FRONTEND_ORIGINS
+        value: https://nahsc0.github.io
+      - key: POSTCODE_MODE
+        value: mock
+      - key: DATABASE_URL
+        fromDatabase:
+          name: innohealth-geocare-db
+          property: connectionString
+      - key: DATA_KEY
+        generateValue: true
+      - key: BOOTSTRAP_EMAIL
+        sync: false
+      - key: BOOTSTRAP_PASSWORD
+        sync: false
+databases:
+  - name: innohealth-geocare-db
+    plan: free
+    region: frankfurt
+    postgresMajorVersion: '16'
+    ipAllowList: []

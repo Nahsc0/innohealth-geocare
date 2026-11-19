@@ -1,0 +1,44 @@
+CREATE TABLE IF NOT EXISTS organisations (
+ id VARCHAR(64) PRIMARY KEY, name VARCHAR(200) NOT NULL, verified INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS users (
+ id VARCHAR(64) PRIMARY KEY, email VARCHAR(254) UNIQUE NOT NULL, password_hash TEXT NOT NULL,
+ role VARCHAR(30) NOT NULL, org_id VARCHAR(64) NOT NULL REFERENCES organisations(id), active INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS sessions (
+ token_hash VARCHAR(64) PRIMARY KEY, user_id VARCHAR(64) NOT NULL REFERENCES users(id), expires BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS facilities (
+ id VARCHAR(64) PRIMARY KEY, name VARCHAR(200) NOT NULL, state VARCHAR(80) NOT NULL,
+ lga VARCHAR(80) NOT NULL, ward VARCHAR(80), postcode VARCHAR(20), lat DOUBLE PRECISION, lon DOUBLE PRECISION,
+ category VARCHAR(30) NOT NULL, ownership VARCHAR(80), services TEXT, hours VARCHAR(120), phone VARCHAR(32),
+ source TEXT NOT NULL, verified_at VARCHAR(10), org_id VARCHAR(64) REFERENCES organisations(id)
+);
+CREATE TABLE IF NOT EXISTS ambulances (
+ id VARCHAR(64) PRIMARY KEY, org_id VARCHAR(64) NOT NULL REFERENCES organisations(id),
+ label VARCHAR(100) NOT NULL, responder_id VARCHAR(64) NOT NULL REFERENCES users(id), available INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS incidents (
+ id VARCHAR(64) PRIMARY KEY, secret_hash VARCHAR(64) NOT NULL, category VARCHAR(30) NOT NULL,
+ status VARCHAR(30) NOT NULL, location TEXT, created BIGINT NOT NULL, updated BIGINT NOT NULL,
+ ambulance_id VARCHAR(64) REFERENCES ambulances(id), escalated INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS incident_messages (
+ id VARCHAR(64) PRIMARY KEY, incident_id VARCHAR(64) NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+ author VARCHAR(64) NOT NULL REFERENCES users(id), message TEXT NOT NULL, created BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS referrals (
+ id VARCHAR(64) PRIMARY KEY, sender VARCHAR(64) NOT NULL REFERENCES organisations(id),
+ receiver VARCHAR(64) NOT NULL REFERENCES organisations(id), facility_id VARCHAR(64) NOT NULL REFERENCES facilities(id),
+ details TEXT, status VARCHAR(30) NOT NULL, created BIGINT NOT NULL, updated BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS audit (
+ id VARCHAR(64) PRIMARY KEY, actor VARCHAR(64), action VARCHAR(40) NOT NULL,
+ entity VARCHAR(64) NOT NULL, created BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS settings (name VARCHAR(60) PRIMARY KEY, value INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS rate_windows (bucket VARCHAR(64) PRIMARY KEY, hits INTEGER NOT NULL, expires BIGINT NOT NULL);
+CREATE INDEX IF NOT EXISTS incidents_updated ON incidents(updated);
+CREATE INDEX IF NOT EXISTS referrals_updated ON referrals(updated);
+CREATE INDEX IF NOT EXISTS facilities_area ON facilities(state,lga,category);
+CREATE INDEX IF NOT EXISTS audit_entity ON audit(entity,created);

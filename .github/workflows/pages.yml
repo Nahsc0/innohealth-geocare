@@ -1,0 +1,53 @@
+name: Deploy GeoCare to GitHub Pages
+on:
+  workflow_dispatch:
+    inputs:
+      preview:
+        description: Publish the labelled frontend preview while the sandbox API is being set up
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: geocare-pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+        id: pages
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+      - name: Verify the hosted sandbox API and Pages origin
+        if: ${{ !inputs.preview }}
+        run: node scripts/verify-pages-api.mjs
+        env:
+          GEOCARE_SITE_URL: ${{ steps.pages.outputs.base_url }}
+          NEXT_PUBLIC_API_URL: ${{ vars.GEOCARE_API_URL }}
+      - run: npm run build
+        working-directory: frontend
+        env:
+          GEOCARE_PAGES: '1'
+          NEXT_PUBLIC_GEOCARE_PREVIEW: ${{ inputs.preview && '1' || '0' }}
+          GEOCARE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          NEXT_PUBLIC_API_URL: ${{ vars.GEOCARE_API_URL }}
+          NEXT_PUBLIC_TILE_URL: ${{ vars.GEOCARE_TILE_URL }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/out
+      - uses: actions/deploy-pages@v4
+        id: deploy
