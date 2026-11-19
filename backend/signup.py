@@ -86,7 +86,8 @@ def apply(body: Application, request: Request):
     identifier = uid()
     with transaction() as db:
         added = query(db, """INSERT INTO partner_applications(id,email,organisation,created)
-            SELECT :id,:email,:org,:created WHERE NOT EXISTS(SELECT 1 FROM users WHERE email=:email)
+            SELECT :id,CAST(:email AS VARCHAR(254)),:org,:created
+            WHERE NOT EXISTS(SELECT 1 FROM users WHERE email=CAST(:email AS VARCHAR(254)))
             ON CONFLICT(email) DO NOTHING""", id=identifier, email=body.email, org=organisation, created=now())
         if added.rowcount:
             audit(db, None, "partner.applied", identifier)

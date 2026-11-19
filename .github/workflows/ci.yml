@@ -36,7 +36,7 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql+psycopg://geocare:ci-only@127.0.0.1/geocare_test
   browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -54,12 +54,14 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
       - run: |
           python -m uvicorn backend.main:app --port 8000 --no-access-log &
           for i in $(seq 1 60); do
-            if curl -fsS http://localhost:8000/health; then cd frontend && npm run e2e; exit $?; fi
+            if curl -fsS http://127.0.0.1:8000/health; then cd frontend && npm run e2e; exit $?; fi
             sleep 1
           done
           exit 1

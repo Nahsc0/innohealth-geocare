@@ -2,6 +2,7 @@ import {expect,test,type APIRequestContext,type Page} from '@playwright/test';
 import {mkdir,readFile} from 'node:fs/promises';
 
 let visitorToken:string|undefined;
+const testApi='http://127.0.0.1:8000';
 const profile={name:'Synthetic Visitor',age:30,gender:'prefer_not_to_say',state:'FCT',lga:'Gwagwalada',phone:'+2347000000001'};
 async function latestMail(email:string){
   const mailbox=process.env.GEOCARE_DEV_MAILBOX;
@@ -13,11 +14,11 @@ async function latestMail(email:string){
 async function openSignedIn(page:Page,request:APIRequestContext,path:string){
   if(!visitorToken){
     const email=`visitor-${Date.now()}@example.invalid`;
-    const codeRequest=await request.post('http://localhost:8000/v1/register/code',{data:{email}});
+    const codeRequest=await request.post(testApi+'/v1/register/code',{data:{email}});
     expect(codeRequest.ok()).toBe(true);
     const mail=await latestMail(email);
     expect(mail).toBeDefined();
-    const registration=await request.post('http://localhost:8000/v1/register',{data:{
+    const registration=await request.post(testApi+'/v1/register',{data:{
       email,password:'Synthetic-test-password-42',challenge:mail!.challenge,code:mail!.code,...profile,
     }});
     expect(registration.ok()).toBe(true);
@@ -134,10 +135,10 @@ test('capture the working visitor pages',async({page,request},testInfo)=>{
 test('capture signed-in partner workflows and a synthetic facility detail',async({page,request},testInfo)=>{
   const email=process.env.BOOTSTRAP_EMAIL,password=process.env.BOOTSTRAP_PASSWORD;
   test.skip(!process.env.GEOCARE_SCREENSHOTS||!email||!password,'Requires an isolated screenshot database');
-  const login=await request.post('http://localhost:8000/v1/login',{data:{email,password}});
+  const login=await request.post(testApi+'/v1/login',{data:{email,password}});
   expect(login.ok()).toBe(true);
   const {token}=await login.json();
-  const seeded=await request.post('http://localhost:8000/v1/admin/facilities/screenshot-only',{
+  const seeded=await request.post(testApi+'/v1/admin/facilities/screenshot-only',{
     headers:{Authorization:'Bearer '+token},
     data:{name:'Synthetic facility · screenshot fixture',state:'FCT',lga:'Synthetic dataset',category:'phc',
       source:'https://example.invalid/test-only',verified_at:'2024-01-01'},

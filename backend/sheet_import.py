@@ -12,7 +12,7 @@ from google.auth.exceptions import GoogleAuthError
 from google.auth.transport.requests import AuthorizedSession
 from pydantic import BaseModel, Field, ValidationError
 from requests import RequestException
-from sqlalchemy import bindparam, text
+from sqlalchemy import String, bindparam, text
 
 from .core import POSTGIS, audit, query, transaction
 from .directory import Facility
@@ -120,7 +120,7 @@ def refresh_sheet(user=Depends(roles("admin"))):
         if POSTGIS:
             query(db, "SELECT pg_advisory_xact_lock(21670512)")
         removed = db.execute(text("""DELETE FROM facility_sheet_entries
-            WHERE facility_id NOT IN :ids RETURNING facility_id""").bindparams(bindparam("ids", expanding=True)), {"ids": ids}).scalars().all()
+            WHERE facility_id NOT IN :ids RETURNING facility_id""").bindparams(bindparam("ids", type_=String(), expanding=True)), {"ids": ids}).scalars().all()
         for facility_id in removed:
             query(db, "UPDATE facilities SET verified_at=NULL WHERE id=:id", id=facility_id)
             audit(db, user["id"], "facility.sheet_unpublished", facility_id)
