@@ -201,3 +201,33 @@ def test_lga_density_and_csv(client,admin):
     assert res.json()["timings"]==[]
     csv=client.get("/v1/analytics/coverage/export",headers=admin)
     assert "density lga" in csv.text and csv.headers["content-type"].startswith("text/csv")
+
+def test_sheet_snapshot_resolves_postcode_and_orders_nearby(client,admin):
+    csv = (
+        'id,name,state,lga,category,postcode,lat,lon,source,verified_at\n'
+        'sheet-far,Sheet import South,Kaduna,Test Area,phc,ZZ-01-A01-ZZ-09,10.59,7.44,https://example.invalid/source,2024-01-01\n'
+        'sheet-near,Sheet import Central,Kaduna,Test Area,phc,ZZ-01-A01-ZZ-08,10.52,7.44,https://example.invalid/source,2024-01-01'
+    )
+    path='/v1/admin/facility-snapshot'
+    assert client.post(path,json={'csv':csv}).status_code==401
+    assert client.post(path,json={'csv':csv},headers=admin).json()=={'imported':2}
+    resolved=client.post('/v1/postcodes/lookup',json={'postcode':'zz01a01zz08'}).json()
+    assert resolved['location']=={'lat':10.52,'lon':7.44}
+    assert resolved['source']=='facility_directory'
+    matched=client.get('/v1/facilities',params={'state':'','q':'Sheet import','lat':10.52,'lon':7.44})
+    assert [row['id'] for row in matched.json()]==['sheet-near','sheet-far']
+
+
+def test_partner_application_approval_and_one_time_activation(client,admin):
+    email='signup-fixture@example.invalid'
+    assert client.post('/v1/partner/signup',json={'email':email,'organisation':'Fixture organisation'}).status_code==202
+    path='/v1/admin/partner-applications'
+    assert client.get(path).status_code==401
+    application=next(row for row in client.get(path,headers=admin).json() if row['email']==email)
+    endpoint=f"{path}/{application['id']}/approve"
+    assert client.post(endpoint,json={'org_id':'pilot','role':'admin'},headers=admin).status_code==422
+    code=client.post(endpoint,json={'org_id':'pilot','role':'analyst'},headers=admin).json()['activation_code']
+    activation={'code':code,'password':'Synthetic-Activation-42'}
+    assert client.post('/v1/partner/activate',json=activation).status_code==201
+    assert client.post('/v1/partner/activate',json=activation).status_code==400
+    assert not any(row['email']==email for row in client.get(path,headers=admin).json())

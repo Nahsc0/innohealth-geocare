@@ -65,37 +65,61 @@ export function Finder(){
   const [results,setResults]=useState<Facility[]>([]),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false);
   const [state,setState]=useState('Kaduna'),[category,setCategory]=useState(''),[term,setTerm]=useState('');
   const [code,setCode]=useState(''),[lookup,setLookup]=useState(''),[checking,setChecking]=useState(false),[failure,setFailure]=useState('');
-  async function search(e?:FormEvent){
-    e?.preventDefault();setBusy(true);setFailure('');
-    const params=new URLSearchParams({state,q:term});
-    if(category)params.set('category',category);
-    if(point){params.set('lat',String(point.lat));params.set('lon',String(point.lon));}
-    try{setResults(await api<Facility[]>('/facilities?'+params));setLoaded(true);}
-    catch{setFailure(t('Directory unavailable. Check your connection and try again.','Ba a samu kundin ba. Duba haɗin intanet sannan ka sake gwadawa.'));}
-    finally{setBusy(false);}
+  const searchVersion=useRef(0), lookupVersion=useRef(0);
+  function clearResults(){
+    searchVersion.current++;
+    setResults([]);setLoaded(false);setBusy(false);setFailure('');
   }
-  async function check(){
-    setChecking(true);setLookup('');
+  async function search(origin:Point|null, autoNearby=false){
+    const request=++searchVersion.current;
+    setBusy(true);setFailure('');
+    const params=new URLSearchParams({state:autoNearby?'':state,q:term});
+    if(category)params.set('category',category);
+    if(origin){params.set('lat',String(origin.lat));params.set('lon',String(origin.lon));}
+    try{
+      const matches=await api<Facility[]>('/facilities?'+params);
+      if(request===searchVersion.current){setResults(matches);setLoaded(true);}
+    }catch{
+      if(request===searchVersion.current)setFailure(t('Directory unavailable. Check your connection and try again.','Ba a samu kundin ba. Duba haɗin intanet sannan ka sake gwadawa.'));
+    }finally{if(request===searchVersion.current)setBusy(false);}
+  }
+  function selectPoint(origin:Point){
+    lookupVersion.current++;setChecking(false);setLookup('');
+    setPoint(origin);setState('');clearResults();void search(origin,true);
+  }
+  async function check(e:FormEvent){
+    e.preventDefault();
+    const request=++lookupVersion.current;
+    setChecking(true);setLookup('');setPoint(null);if(!state)setState('Kaduna');clearResults();
     try{
       const result=await api<{valid:boolean;source:string;location:Point|null}>('/postcodes/lookup',json({postcode:code}));
-      if(result.location)setPoint(result.location);
-      if(result.source==='local_mock')setLookup(result.valid?t('Local mock postcode matched. Demo coordinates selected.','An samu lambar gwaji. An zaɓi wurin gwaji.'):t('No local mock match. Use GPS, the map or coordinates.','Ba a samu lambar gwaji ba. Yi amfani da GPS ko taswira.'));
-      else setLookup((result.source==='nipost_test'?'NIPOST sandbox · ':'NIPOST · ')+(result.valid?t('Postcode recognised. Use GPS or the map to select a location.','An gane lambar. Yi amfani da GPS ko taswira don zaɓar wuri.'):t('Postcode unrecognised.','Ba a gane lambar gidan waya ba.')));
-    }catch{setLookup(t('Could not verify the postcode. Check the format or use GPS or the map.','An kasa tabbatar da lambar. Duba tsarin lambar ko amfani da GPS ko taswira.'));}
-    finally{setChecking(false);}
+      if(request!==lookupVersion.current)return;
+      if(result.location){
+        setPoint(result.location);setState('');void search(result.location,true);
+        setLookup(result.source==='local_mock'
+          ? t('Local mock postcode matched. Demo coordinates selected.','An samu lambar gwaji. An zaɓi wurin gwaji.')
+          : t('Postcode matched a directory location. Nearby facilities are ordered by distance.','An samu wurin lambar gidan waya. An tsara cibiyoyi bisa nisa.'));
+      }else{
+        setLookup(result.valid
+          ? t('Postcode recognised. Use GPS, the map or coordinates to find nearby facilities.','An gane lambar. Yi amfani da GPS ko taswira don ganin cibiyoyin da ke kusa.')
+          : t('Postcode location unavailable. Use GPS, the map or coordinates.','Ba a gano wuri ba. Yi amfani da GPS ko taswira.'));
+      }
+    }catch{
+      if(request===lookupVersion.current)setLookup(t('Could not verify the postcode. Check the format or use GPS or the map.','An kasa tabbatar da lambar. Duba tsarin lambar ko amfani da GPS ko taswira.'));
+    }finally{if(request===lookupVersion.current)setChecking(false);}
   }
   return <div className="wrap page">
     <PageHeading title={t('Find healthcare','Nemo cibiyar lafiya')} detail={t('Search verified directory entries by name, local government area or distance.','Nemi cibiyoyin da aka tabbatar da su ta suna, ƙaramar hukuma ko nisa.')}/>
     <div className="layout"><section className="card stack"><h2>{t('Choose a location','Zaɓi wuri')}</h2>
-      <label>{t('Digital postcode','Lambar gidan waya ta dijital')}<input value={code} maxLength={32} onChange={e=>setCode(e.target.value)} placeholder="AA-01-A01-AA-01"/></label>
-      <button className="button outline" type="button" disabled={!code.trim()||checking} onClick={check}>{checking?t('Checking…','Ana dubawa…'):t('Check postcode','Duba lambar gidan waya')}</button>
-      <Notice text={lookup}/><LocationFields point={point} onPoint={setPoint}/>
+      <form className="stack" onSubmit={check}><label>{t('Digital postcode','Lambar gidan waya ta dijital')}<input value={code} maxLength={32} onChange={e=>{lookupVersion.current++;setChecking(false);setCode(e.target.value);setPoint(null);if(!state)setState('Kaduna');setLookup('');clearResults();}} placeholder="AA-01-A01-AA-01"/></label>
+      <button className="button outline" type="submit" disabled={!code.trim()||checking}>{checking?t('Checking…','Ana dubawa…'):t('Check postcode and find nearby','Duba lambar gidan waya ka nemo na kusa')}</button>
+      </form><Notice text={lookup}/><LocationFields point={point} onPoint={selectPoint}/>
       <button className="button outline" type="button" onClick={()=>setShowMap(v=>!v)}><MapPin size={17}/>{showMap?t('Hide map','Ɓoye taswira'):t('Open map to select a point','Buɗe taswira don zaɓar wuri')}</button>
-      {point&&<button className="button ghost" onClick={()=>setPoint(null)}>{t('Clear selected location','Cire wurin da aka zaɓa')}</button>}
+      {point&&<button className="button ghost" onClick={()=>{setPoint(null);if(!state)setState('Kaduna');setLookup('');clearResults();}}>{t('Clear selected location','Cire wurin da aka zaɓa')}</button>}
     </section><section className="card stack">
-      {showMap&&<MapView point={point} markers={results.flatMap(f=>f.lat===null||f.lon===null?[]:[{lat:f.lat,lon:f.lon}])} onPick={setPoint} label={t('Facility map','Taswirar cibiyoyin lafiya')}/>}
+      {showMap&&<MapView point={point} markers={results.flatMap(f=>f.lat===null||f.lon===null?[]:[{lat:f.lat,lon:f.lon}])} onPick={selectPoint} label={t('Facility map','Taswirar cibiyoyin lafiya')}/>}
       <h2>{t('Facility directory','Kundin cibiyoyin lafiya')}</h2>
-      <form className="stack" onSubmit={search}><div className="form-row"><label>{t('State','Jiha')}<select value={state} onChange={e=>setState(e.target.value)}>{states.map(s=><option key={s}>{s}</option>)}</select></label>
+      <form className="stack" onSubmit={e=>{e.preventDefault();void search(point);}}><div className="form-row"><label>{t('State','Jiha')}<select value={state} onChange={e=>setState(e.target.value)}>{point&&<option value="">{t('Any nearby state','Duk jihar da ke kusa')}</option>}{states.map(s=><option key={s}>{s}</option>)}</select></label>
       <label>{t('Facility type','Nau’in cibiyar')}<select value={category} onChange={e=>setCategory(e.target.value)}><option value="">{t('All facility types','Duk nau’o’i')}</option>{categoryEntries.map(([key,value])=><option key={key} value={key}>{t(...value as [string,string])}</option>)}</select></label></div>
       <label>{t('Name or LGA','Suna ko ƙaramar hukuma')}<input maxLength={100} value={term} onChange={e=>setTerm(e.target.value)}/></label>
       <button className="button primary" disabled={busy}><Search size={18}/>{busy?t('Searching…','Ana nema…'):t('Search directory','Bincika kundin')}</button></form>

@@ -6,6 +6,7 @@ import {FormEvent,useCallback,useEffect,useState} from 'react';
 import {api, Facility, json, Point, setToken} from '@/lib/api';
 import {AccessAnalysis,CommunityEditor} from './access';
 import {AreaEditor,CoverageReport} from './coverage';
+import {Applications,SheetSnapshot} from './signup';
 import {categoryEntries, errorText, Notice, PageHeading, statusNames} from './public';
 
 const MapView=dynamic(()=>import('./map'),{ssr:false});
@@ -41,6 +42,7 @@ export function Login(){
     {user?<div className="card stack">Signed in as {user.email}<PartnerLinks user={user}/></div>:<form className="card narrow stack" onSubmit={submit}>
       <label>Email<input autoComplete="username" type="email" name="email" required maxLength={254}/></label><label>Password<input type="password" name="password" autoComplete="current-password" required maxLength={256}/></label>
       <button className="button primary" disabled={busy}>{busy?'Signing in…':'Sign in'}</button><Notice error text={error}/>
+      <Link className="button outline" href="/partner/signup">Create a partner account</Link>
     </form>}</div>;
 }
 export function Workspace(){
@@ -242,6 +244,7 @@ function Admin(){
       <label>Organisation<select name="org_id" required><option value="">Select organisation</option>{orgs.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
       <button className="button primary" disabled={busy}>Create account</button></form>
     </section></div>
+    <Applications organisations={orgs}/><SheetSnapshot onImported={refresh}/>
     <section className="card stack"><h2>Facility verification</h2><p>Use authorised source records. Leave the verification date empty to save a draft or unpublish a listing.</p>
       {drafts.map(f=><button className="button outline" key={f.id} onClick={()=>setDraft(f)}>{f.name} · {f.verified_at||'Draft'}</button>)}
       <button className="button outline" onClick={()=>setDraft(undefined)}>New facility</button>

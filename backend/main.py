@@ -17,7 +17,9 @@ from .access import router as access
 from .coverage import router as coverage
 from .workflows import router as workflows
 from .security import Account, roles
-from .postcodes import lookup
+from .postcodes import lookup, normalize
+from .signup import router as signup
+from .sheet_import import router as sheet_import
 
 @asynccontextmanager
 async def lifespan(_):
@@ -58,12 +60,24 @@ class Postcode(BaseModel):
 async def postcode(body: Postcode, request: Request):
     from .security import limit
     limit(request, "postcode", 30)
-    return await lookup(body.postcode)
+    try:
+        code = normalize(body.postcode)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    with transaction() as db:
+        matches = rows(db, """SELECT DISTINCT lat,lon FROM facilities
+            WHERE postcode=:code AND verified_at IS NOT NULL AND lat IS NOT NULL AND lon IS NOT NULL
+            LIMIT 2""", code=code)
+    if len(matches) == 1:
+        return {"postcode": code, "valid": True, "source": "facility_directory", "location": matches[0]}
+    return await lookup(code)
 
 app.include_router(directory)
 app.include_router(access)
 app.include_router(coverage)
 app.include_router(workflows)
+app.include_router(signup)
+app.include_router(sheet_import)
 
 class Login(BaseModel):
     email: str = Field(min_length=3, max_length=254)

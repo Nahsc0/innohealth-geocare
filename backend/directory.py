@@ -61,7 +61,9 @@ def facilities(state: str = Query("Kaduna", max_length=80), category: Category |
                lon: float | None = Query(None, ge=-180, le=180), radius: int = Query(50, ge=1, le=300)):
     if (lat is None) != (lon is None):
         raise HTTPException(422, "Provide both coordinates")
-    conditions = """verified_at IS NOT NULL AND lower(state)=lower(:state)
+    if not state and lat is None:
+        raise HTTPException(422, "Select a state or provide a location")
+    conditions = """verified_at IS NOT NULL AND (:state='' OR lower(state)=lower(:state))
         AND (CAST(:category AS VARCHAR) IS NULL OR category=:category)
         AND (lower(name) LIKE :q OR lower(lga) LIKE :q)"""
     params = dict(state=state, category=category, q="%"+q.lower()+"%", lat=lat, lon=lon, radius=radius)
