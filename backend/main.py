@@ -7,7 +7,10 @@ from typing import Literal
 
 from argon2.exceptions import VerificationError
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
@@ -16,10 +19,11 @@ from .directory import router as directory
 from .access import router as access
 from .coverage import router as coverage
 from .workflows import router as workflows
-from .security import Account, roles
+from .security import Account, activity_month, current_user, issue_session, roles
 from .postcodes import lookup, normalize
 from .signup import router as signup
 from .sheet_import import router as sheet_import
+from .registration_store import login_verifier, registry_config
 
 @asynccontextmanager
 async def lifespan(_):
@@ -32,6 +36,13 @@ app = FastAPI(title="InnoHealth GeoCare", version="0.1.0", lifespan=lifespan)
 origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST", "PATCH"],
                    allow_headers=["Authorization", "Content-Type", "X-Tracking-Key"])
+
+@app.exception_handler(RequestValidationError)
+async def protect_password_inputs(request: Request, exc: RequestValidationError):
+    if request.url.path in {"/v1/login", "/v1/register", "/v1/partner/activate", "/v1/admin/users"}:
+        issues = [{key: error[key] for key in ("type", "loc", "msg")} for error in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": issues})
+    return await request_validation_exception_handler(request, exc)
 
 request_counts = Counter()
 
@@ -51,12 +62,17 @@ async def headers(request: Request, call_next):
 def health():
     with transaction() as db:
         query(db, "SELECT 1")
-    return {"ready": True, "dispatch_enabled": False, "mode": "sandbox"}
+    try:
+        registration_configured = registry_config() is not None
+    except HTTPException:
+        registration_configured = False
+    return {"ready": True, "dispatch_enabled": False, "mode": "sandbox",
+            "registration_configured": registration_configured}
 
 class Postcode(BaseModel):
     postcode: str = Field(min_length=1, max_length=32)
 
-@app.post("/v1/postcodes/lookup")
+@app.post("/v1/postcodes/lookup", dependencies=[Depends(current_user)])
 async def postcode(body: Postcode, request: Request):
     from .security import limit
     limit(request, "postcode", 30)
@@ -91,18 +107,17 @@ def login(body: Login, request: Request):
     limit(request, "login", 8, 300)
     email_tag = digest(body.email.lower().strip())
     limit(request, "account:" + email_tag, 8, 300, per_client=False)
-    token = secrets.token_urlsafe(32)
     with transaction() as db:
         user = one(db, """SELECT u.* FROM users u JOIN organisations o ON u.org_id=o.id
                            WHERE u.email=:email AND u.active=1 AND o.verified=1""", email=body.email.lower().strip())
-        try:
-            if not passwords.verify(user["password_hash"] if user else DUMMY_HASH, body.password) or not user:
-                raise HTTPException(401, "Invalid credentials")
-        except VerificationError as exc:
-            raise HTTPException(401, "Invalid credentials") from exc
-        query(db, "INSERT INTO sessions VALUES (:token,:user,:expires)",
-              token=digest(token), user=user["id"], expires=now() + 28800)
-        audit(db, user["id"], "session.created", user["id"])
+    verifier = login_verifier(user["id"], user["password_hash"]) if user else DUMMY_HASH
+    try:
+        if not passwords.verify(verifier, body.password) or not user:
+            raise HTTPException(401, "Invalid credentials")
+    except VerificationError as exc:
+        raise HTTPException(401, "Invalid credentials") from exc
+    with transaction() as db:
+        token = issue_session(db, user["id"])
     return {"token": token, "role": user["role"]}
 
 @app.get("/v1/me")
@@ -117,6 +132,14 @@ def logout(user: Account, credential: HTTPAuthorizationCredentials = Depends(HTT
     return Response(status_code=204)
 
 Admin = Depends(roles("admin"))
+
+@app.get("/v1/admin/monthly-activity")
+def monthly_activity(user=Admin):
+    month = activity_month(now())
+    with transaction() as db:
+        counts = rows(db, """SELECT month,COUNT(*) AS active_users FROM account_monthly_activity
+            GROUP BY month ORDER BY month DESC LIMIT 12""")
+    return {"month": month, "counts": counts}
 
 class Organisation(BaseModel):
     name: str = Field(min_length=2, max_length=200)

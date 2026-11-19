@@ -1,17 +1,74 @@
-import {expect,test} from '@playwright/test';
-import {mkdir} from 'node:fs/promises';
+import {expect,test,type APIRequestContext,type Page} from '@playwright/test';
+import {mkdir,readFile} from 'node:fs/promises';
 
-test('public navigation, Hausa and responsive layout',async({page})=>{
-  await page.goto('/');
+let visitorToken:string|undefined;
+const profile={name:'Synthetic Visitor',age:30,gender:'prefer_not_to_say',state:'FCT',lga:'Gwagwalada',phone:'+2347000000001'};
+async function latestMail(email:string){
+  const mailbox=process.env.GEOCARE_DEV_MAILBOX;
+  if(!mailbox)throw new Error('Set GEOCARE_DEV_MAILBOX on the API and Playwright processes.');
+  const contents=await readFile(mailbox,'utf8').catch(()=> '');
+  return contents.trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)).reverse()
+    .find((item:{recipient:string})=>item.recipient===email) as {challenge:string;code:string}|undefined;
+}
+async function openSignedIn(page:Page,request:APIRequestContext,path:string){
+  if(!visitorToken){
+    const email=`visitor-${Date.now()}@example.invalid`;
+    const codeRequest=await request.post('http://localhost:8000/v1/register/code',{data:{email}});
+    expect(codeRequest.ok()).toBe(true);
+    const mail=await latestMail(email);
+    expect(mail).toBeDefined();
+    const registration=await request.post('http://localhost:8000/v1/register',{data:{
+      email,password:'Synthetic-test-password-42',challenge:mail!.challenge,code:mail!.code,...profile,
+    }});
+    expect(registration.ok()).toBe(true);
+    visitorToken=(await registration.json()).token;
+  }
+  await page.goto(path);
+  await page.evaluate(token=>sessionStorage.setItem('geocare-session',token!),visitorToken);
+  await page.reload();
+}
+
+test('individual signup unlocks direct routes and sign-out locks them again',async({page})=>{
+  await page.goto('/find');
+  await expect(page.getByRole('heading',{name:'Sign in to GeoCare'})).toBeVisible();
+  await page.getByRole('button',{name:'Create an individual account'}).click();
+  const email=`signup-${Date.now()}@example.invalid`,password='Synthetic-test-password-42';
+  await page.getByLabel('Email',{exact:true}).fill(email);
+  await page.getByRole('button',{name:'Send email code',exact:true}).click();
+  await expect(page.getByLabel('Email verification code')).toBeVisible();
+  const mail=await latestMail(email);
+  expect(mail).toBeDefined();
+  await page.getByLabel('Email verification code').fill(mail!.code);
+  await page.getByLabel('Full name').fill(profile.name);
+  await page.getByLabel('Age',{exact:true}).fill(String(profile.age));
+  await page.locator('select[name="gender"]').selectOption(profile.gender);
+  await page.locator('select[name="state"]').selectOption(profile.state);
+  await page.getByLabel('Local government area (LGA)').fill(profile.lga);
+  await page.getByLabel('Contact number').fill(profile.phone);
+  await page.getByLabel('Password',{exact:true}).fill(password);
+  await page.getByRole('button',{name:'Verify and create account',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Facility directory'})).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading',{name:'Facility directory'})).toBeVisible();
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Sign in to GeoCare'})).toBeVisible();
+  await page.getByLabel('Email',{exact:true}).fill(email);
+  await page.getByLabel('Password',{exact:true}).fill(password);
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Facility directory'})).toBeVisible();
+});
+
+test('signed-in navigation, Hausa and responsive layout',async({page,request})=>{
+  await openSignedIn(page,request,'/');
   await expect(page.getByRole('heading',{name:'Find healthcare closer to you.'})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.getByRole('button',{name:'Switch to Hausa'}).click();
   await expect(page.locator('html')).toHaveAttribute('lang','ha');
   await expect(page.getByRole('link',{name:'Bibiyi buƙata',exact:true})).toBeVisible();
 });
-test('GPS failure falls back to manual search',async({page})=>{
+test('GPS failure falls back to manual search',async({page,request})=>{
   await page.addInitScript(()=>Object.defineProperty(navigator,'geolocation',{value:{getCurrentPosition:(_:unknown,failure:()=>void)=>failure()}}));
-  await page.goto('/find');
+  await openSignedIn(page,request,'/find');
   await page.getByRole('button',{name:'Use my GPS location'}).click();
   await expect(page.locator('main').getByRole('alert')).toContainText('Location unavailable');
   await page.getByLabel('Latitude').fill('10.52');
@@ -20,15 +77,15 @@ test('GPS failure falls back to manual search',async({page})=>{
   await page.getByRole('button',{name:'Search directory'}).click();
   await expect(page.getByRole('status')).toContainText('No verified facilities matched');
 });
-test('mock postcode is labelled and remains usable',async({page})=>{
-  await page.goto('/find');
+test('mock postcode is labelled and remains usable',async({page,request})=>{
+  await openSignedIn(page,request,'/find');
   await page.getByLabel('Digital postcode').fill('ZZ-01-A01-ZZ-01');
   await page.getByRole('button',{name:'Check postcode'}).click();
   await expect(page.getByRole('status')).toContainText('Local mock postcode matched');
   await expect(page.getByLabel('Latitude')).toHaveValue('10.52');
 });
-test('simulated incident is saved and privately tracked',async({page})=>{
-  await page.goto('/emergency');
+test('simulated incident is saved and privately tracked',async({page,request})=>{
+  await openSignedIn(page,request,'/emergency');
   await expect(page.getByRole('link',{name:'SOS · Call 112'})).toHaveAttribute('href','tel:112');
   await page.getByLabel('Simulated landmark').fill('Synthetic training location');
   await page.getByLabel('I confirm these details are synthetic.').check();
@@ -42,8 +99,8 @@ test('simulated incident is saved and privately tracked',async({page})=>{
   await expect(page.getByRole('status')).toContainText('Submitted');
   await expect(page.getByRole('status')).toContainText('No help was dispatched');
 });
-test('failed request on an interrupted connection has no dispatch acknowledgement',async({page})=>{
-  await page.goto('/emergency');
+test('failed request on an interrupted connection has no dispatch acknowledgement',async({page,request})=>{
+  await openSignedIn(page,request,'/emergency');
   await page.route('**/v1/incidents',async route=>{
     await new Promise(resolve=>setTimeout(resolve,350));
     await route.abort('internetdisconnected');
@@ -56,17 +113,22 @@ test('failed request on an interrupted connection has no dispatch acknowledgemen
 });
 test('partner screens require authentication',async({page})=>{
   await page.goto('/admin');
-  await expect(page.getByRole('link',{name:'Go to partner login'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Sign in to GeoCare'})).toBeVisible();
   await expect(page.getByRole('heading',{name:'User management'})).toHaveCount(0);
 });
-test('capture the working public pages',async({page},testInfo)=>{
+test('capture the working visitor pages',async({page,request},testInfo)=>{
   test.skip(!process.env.GEOCARE_SCREENSHOTS,'Screenshots only on explicit QA runs');
   await mkdir('../docs/screenshots',{recursive:true});
-  for(const [path,slug] of [['/','home'],['/find','finder'],['/emergency','emergency'],['/track','tracking'],['/partner','partner-login']]){
+  await openSignedIn(page,request,'/');
+  for(const [path,slug] of [['/','home'],['/find','finder'],['/emergency','emergency'],['/track','tracking']]){
     await page.goto(path);
     await expect(page.getByRole('heading',{level:1})).toBeVisible();
     await page.screenshot({path:'../docs/screenshots/'+slug+'-'+testInfo.project.name+'.png',fullPage:true,animations:'disabled'});
   }
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();
+  await page.goto('/partner');
+  await expect(page.getByRole('heading',{name:'Partner login'})).toBeVisible();
+  await page.screenshot({path:'../docs/screenshots/partner-login-'+testInfo.project.name+'.png',fullPage:true,animations:'disabled'});
 });
 
 test('capture signed-in partner workflows and a synthetic facility detail',async({page,request},testInfo)=>{
@@ -82,13 +144,12 @@ test('capture signed-in partner workflows and a synthetic facility detail',async
   });
   expect(seeded.ok()).toBe(true);
   await mkdir('../docs/screenshots',{recursive:true});
+  await page.goto('/partner');
+  await page.evaluate(token=>sessionStorage.setItem('geocare-session',token),token);
   await page.goto('/facilities?id=screenshot-only');
   await expect(page.getByRole('heading',{name:'Synthetic facility · screenshot fixture'})).toBeVisible();
   await page.screenshot({path:'../docs/screenshots/facility-details-'+testInfo.project.name+'.png',fullPage:true});
   await page.goto('/partner');
-  await page.getByLabel('Email').fill(email!);
-  await page.getByLabel('Password').fill(password!);
-  await page.getByRole('button',{name:'Sign in',exact:true}).click();
   const links=page.getByRole('navigation',{name:'Partner workspaces'});
   await expect(links).toBeVisible();
   for(const [name,slug] of [['Dispatch','dispatch'],['Facility dashboard','facility-dashboard'],['Maternal referrals','referrals'],['GIS analytics','analytics'],['Administration','admin']]){

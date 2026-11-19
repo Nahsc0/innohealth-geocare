@@ -6,7 +6,7 @@ Target a dedicated `Nahsc0/innohealth-geocare` project repository. The default p
 2. Set `FRONTEND_ORIGINS=https://nahsc0.github.io` in the API environment. Browsers send the origin without the repository path. Leave dispatch disabled and use synthetic records.
 3. Push the project to its dedicated repository. Set **Settings → Pages → Build and deployment → Source** to **GitHub Actions**.
 4. Under **Settings → Secrets and variables → Actions → Variables**, set `GEOCARE_API_URL` to the HTTPS API base URL with no trailing `/v1`. Set `GEOCARE_TILE_URL` to the approved public map tile template if available. Keep database, encryption and provider secrets in the API host.
-5. Run **Deploy GeoCare to GitHub Pages** manually. The workflow checks API health, dispatch mode, CORS and the public facility directory before publishing. Open the URL from the deployment job and smoke-test the public and partner flows with synthetic data.
+5. Configure the [Apps Script account registry](account-registration.md) on the hosted backend. Run **Deploy GeoCare to GitHub Pages** manually. The workflow checks API health, registration configuration, CORS and whether the facility directory requires sign-in. Open the URL from the deployment job and smoke-test individual and partner signup with synthetic data.
 
 The static route for facility details uses `/facilities/?id=...` so newly verified facilities can be opened without rebuilding the frontend. The Pages build uses the base path returned by GitHub.
 

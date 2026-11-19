@@ -26,6 +26,10 @@ services:
         sync: false
       - key: BOOTSTRAP_PASSWORD
         sync: false
+      - key: APPS_SCRIPT_REGISTRY_URL
+        sync: false
+      - key: APPS_SCRIPT_REGISTRY_SECRET
+        sync: false
 databases:
   - name: innohealth-geocare-db
     plan: free

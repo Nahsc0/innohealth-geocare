@@ -4,11 +4,14 @@ import Link from 'next/link';
 import {usePathname} from 'next/navigation';
 import {Activity, Globe2, HeartPulse, LockKeyhole, MapPin, Phone, Search} from 'lucide-react';
 import {useLanguage} from './language';
+import {AccountAccess,useSession} from './session';
 import innoHealthLogo from '@/public/brand/innohealth-logo.webp';
 
 export function Shell({children}:{children:React.ReactNode}) {
   const {t,toggle,lang}=useLanguage();
   const path=usePathname().replace(/\/$/, '') || '/';
+  const {user,checking,error,check,logout}=useSession();
+  const publicPage=['/privacy','/terms','/partner','/partner/signup'].includes(path);
   return <>
     <a className="skip" href="#main">{t('Skip to content','Tsallaka zuwa babban sashe')}</a>
     <header className="top"><div className="wrap mast">
@@ -16,18 +19,20 @@ export function Shell({children}:{children:React.ReactNode}) {
         <Image className="brand-logo" src={innoHealthLogo} alt="InnoHealth Technologies" unoptimized priority/>
         <span className="brand-product">GeoCare</span>
       </Link>
-      <nav aria-label={t('Main navigation','Babban menu')}>
+      {user&&<nav aria-label={t('Main navigation','Babban menu')}>
         <Link href="/find" aria-current={path==='/find'?'page':undefined}>{t('Find healthcare','Nemo cibiyar lafiya')}</Link>
         <Link href="/emergency" aria-current={path==='/emergency'?'page':undefined}>{t('Emergency','Gaggawa')}</Link>
         <Link href="/track" aria-current={path==='/track'?'page':undefined}>{t('Track request','Bibiyi buƙata')}</Link>
-      </nav>
+      </nav>}
       <div className="top-actions"><button className="button ghost small" onClick={toggle} aria-label={t('Switch to Hausa','Canja zuwa Turanci')}><Globe2 size={16}/>{lang==='en'?'Hausa':'English'}</button>
-      <Link className="button outline small" href="/partner"><LockKeyhole size={16}/>{t('Partner login','Shigar abokan aiki')}</Link></div>
+      {user&&user.role!=='individual'&&<Link className="button outline small" href="/partner"><LockKeyhole size={16}/>{t('Partner workspace','Wurin aikin abokan hulɗa')}</Link>}
+      {user?<button className="button outline small" onClick={()=>void logout().catch(()=>{})}>{t('Sign out','Fita')}</button>:<Link className="button outline small" href="/partner"><LockKeyhole size={16}/>{t('Partner login','Shigar abokan aiki')}</Link>}</div>
     </div></header>
     <aside className="safety"><div className="wrap safety-inner"><span><strong>{t('Sandbox only','Wurin gwaji kawai')}</strong> · {t('GeoCare cannot dispatch emergency assistance.','GeoCare ba zai iya tura agajin gaggawa ba.')}</span>
       <a href="tel:112"><Phone size={15}/>{t('Call 112 in Nigeria','Kira 112 a Najeriya')}</a></div></aside>
     {process.env.NEXT_PUBLIC_GEOCARE_PREVIEW==='1'&&<div className="wrap"><p className="notice">{t('Frontend preview. Facility search, incident tracking and partner services are offline while hosting is set up.','Wannan samfotin shafi ne. Binciken cibiyoyi, bin diddigin buƙatu da ayyukan abokan hulɗa suna jiran kunna sabar.')}</p></div>}
-    <main id="main">{children}</main>
+    <main id="main">{user||publicPage?children:checking?<div className="wrap page" role="status">{t('Checking your session…','Ana duba asusunka…')}</div>:
+      error?<div className="wrap page stack"><p role="alert">{error}</p><button className="button outline" onClick={()=>void check()}>{t('Try again','Sake gwadawa')}</button></div>:<AccountAccess/>}</main>
     <footer className="foot">
       <div className="wrap footer-inner">
         <div className="footer-company">

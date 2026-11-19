@@ -24,7 +24,7 @@ export function PartnerSignup(){
     <form className="card narrow stack" key={String(activation)} onSubmit={submit}>
       {activation?<><label>Activation code<input name="code" required maxLength={43} autoComplete="off"/></label>
       <label>New password<input name="password" type="password" required minLength={14} maxLength={256} autoComplete="new-password"/></label></>:
-      <><p>An administrator reviews your organisation and sends a single-use code through a verified contact channel.</p>
+      <><p>An administrator reviews your organisation and sends a single-use code through a verified contact channel. Use a work email distinct from any existing individual account.</p>
       <label>Work email<input name="email" type="email" required maxLength={254} autoComplete="email"/></label>
       <label>Organisation<input name="organisation" required minLength={2} maxLength={200} autoComplete="organization"/></label></>}
       <button className="button primary" disabled={busy}>{busy?'Submitting…':activation?'Activate account':'Request access'}</button>
@@ -61,6 +61,16 @@ export function Applications({organisations}:{organisations:{id:string;name:stri
 
 export function SheetSnapshot({onImported}:{onImported:()=>Promise<void>}){
   const [notice,setNotice]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+  async function refreshFromGoogle(){
+    setBusy(true);setNotice('');setError('');
+    try{
+      const result=await api<{imported:number;unpublished:number}>('/admin/facility-sheet/refresh',{
+        method:'POST',signal:AbortSignal.timeout(25000),
+      });
+      setNotice(`Refreshed ${result.imported} facility records. ${result.unpublished} removed from the directory.`);
+      await onImported();
+    }catch(e){setError(errorText(e));}finally{setBusy(false);}
+  }
   async function submit(event:FormEvent<HTMLFormElement>){
     event.preventDefault();setBusy(true);setNotice('');setError('');
     const form=event.currentTarget;
@@ -72,10 +82,11 @@ export function SheetSnapshot({onImported}:{onImported:()=>Promise<void>}){
     }catch(e){setError(errorText(e));}finally{setBusy(false);}
   }
   return <form className="card stack" onSubmit={submit}>
-    <h2>Google Sheets directory import</h2>
-    <p>Download the Facilities tab as CSV. Import only authorised facility directory data.</p>
+    <h2>Google Sheets facility directory</h2>
+    <button className="button primary" type="button" onClick={refreshFromGoogle} disabled={busy}>Refresh from Google Sheets</button>
+    <p>You can also download the Facilities tab as CSV and import it here.</p>
     <label>Facilities CSV<input type="file" name="csv" accept=".csv,text/csv" required/></label>
-    <button className="button primary" disabled={busy}>{busy?'Importing…':'Import directory snapshot'}</button>
+    <button className="button outline" disabled={busy}>Import directory snapshot</button>
     <Notice text={notice}/><Notice error text={error}/>
   </form>;
 }

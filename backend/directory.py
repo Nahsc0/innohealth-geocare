@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 from .core import POSTGIS, audit, one, query, rows, transaction
 from .postcodes import normalize
-from .security import limit, roles
+from .security import current_user, limit, roles
 
 router = APIRouter(prefix="/v1")
 Category = Literal["phc","general","specialist","maternity","emergency","pharmacy","laboratory"]
@@ -55,7 +55,7 @@ def distance(a, b, lat, lon):
     x = math.sin(math.radians(lat-a)/2)**2 + math.cos(math.radians(a))*math.cos(math.radians(lat))*math.sin(math.radians(lon-b)/2)**2
     return 12742 * math.asin(math.sqrt(min(1, x)))
 
-@router.get("/facilities")
+@router.get("/facilities", dependencies=[Depends(current_user)])
 def facilities(state: str = Query("Kaduna", max_length=80), category: Category | None = None,
                q: str = Query("", max_length=100), lat: float | None = Query(None, ge=-90, le=90),
                lon: float | None = Query(None, ge=-180, le=180), radius: int = Query(50, ge=1, le=300)):
@@ -80,7 +80,7 @@ def facilities(state: str = Query("Kaduna", max_length=80), category: Category |
         record["distance_km"] = distance(lat, lon, record["lat"], record["lon"])
     return sorted((item for item in records if item["distance_km"] <= radius), key=lambda item: item["distance_km"])[:100]
 
-@router.get("/facilities/{record_id}")
+@router.get("/facilities/{record_id}", dependencies=[Depends(current_user)])
 def facility(record_id: str):
     with transaction() as db:
         record = one(db, f"SELECT {PUBLIC} FROM facilities WHERE id=:id AND verified_at IS NOT NULL", id=record_id)
@@ -110,7 +110,7 @@ def verify(record_id: str, body: Facility, user=Admin):
         audit(db, user["id"], "facility.verified" if body.verified_at else "facility.draft", record_id)
     return {"id": record_id, "published": body.verified_at is not None}
 
-@router.post("/facilities/{record_id}/route")
+@router.post("/facilities/{record_id}/route", dependencies=[Depends(current_user)])
 async def route(record_id: str, point: Point, request: Request):
     limit(request, "route", 25)
     return await road_estimate(point, facility(record_id))

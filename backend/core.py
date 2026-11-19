@@ -62,7 +62,7 @@ def migrate():
     with engine.begin() as db:
         if POSTGIS:
             query(db, "SELECT pg_advisory_xact_lock(21670495)")
-        for filename in ["001_schema.sql"] + (["002_postgis.sql"] if POSTGIS else []) + ["003_access.sql", "004_incident_retry.sql", "005_coverage.sql", "006_partner_signup.sql"]:
+        for filename in ["001_schema.sql"] + (["002_postgis.sql"] if POSTGIS else []) + ["003_access.sql", "004_incident_retry.sql", "005_coverage.sql", "006_partner_signup.sql", "007_facility_sheet_entries.sql", "008_visitor_accounts.sql", "009_verified_registration.sql"]:
             for statement in (ROOT / "migrations" / filename).read_text().split(";"):
                 if statement.strip():
                     query(db, statement)
@@ -91,6 +91,7 @@ def purge(db):
     cutoff = timestamp - 86400 * (setting["value"] if setting else 30)
     query(db, "DELETE FROM sessions WHERE expires < :now", now=timestamp)
     query(db, "DELETE FROM rate_windows WHERE expires < :now", now=timestamp)
+    query(db, "DELETE FROM registration_codes WHERE expires <= :now", now=timestamp)
     query(db, "DELETE FROM incident_messages WHERE created < :cutoff", cutoff=cutoff)
     query(db, "UPDATE incidents SET location=NULL WHERE updated < :cutoff AND location IS NOT NULL", cutoff=cutoff)
     query(db, "UPDATE referrals SET details=NULL WHERE updated < :cutoff AND details IS NOT NULL", cutoff=cutoff)

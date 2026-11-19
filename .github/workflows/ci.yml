@@ -65,6 +65,7 @@ jobs:
           exit 1
         env:
           GEOCARE_BUILD_TEST: "1"
+          GEOCARE_DEV_MAILBOX: ${{ runner.temp }}/geocare-test-mail.jsonl
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

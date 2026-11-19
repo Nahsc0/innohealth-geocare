@@ -17,7 +17,7 @@ export const categories = {
   pharmacy:['Pharmacies','Kantunan magani'],
   laboratory:['Laboratories','Dakunan gwaje-gwaje'],
 };
-const states=['Kaduna','Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno','Cross River','Delta','Ebonyi','Edo','Ekiti','Enugu','FCT','Gombe','Imo','Jigawa','Kano','Katsina','Kebbi','Kogi','Kwara','Lagos','Nasarawa','Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara'];
+export const states=['Kaduna','Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno','Cross River','Delta','Ebonyi','Edo','Ekiti','Enugu','FCT','Gombe','Imo','Jigawa','Kano','Katsina','Kebbi','Kogi','Kwara','Lagos','Nasarawa','Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara'];
 export const categoryEntries=Object.entries(categories);
 export const statusNames:Record<string,[string,string]>={
   submitted:['Submitted','An aika'],
@@ -70,10 +70,10 @@ export function Finder(){
     searchVersion.current++;
     setResults([]);setLoaded(false);setBusy(false);setFailure('');
   }
-  async function search(origin:Point|null, autoNearby=false){
+  async function search(origin:Point|null, autoNearby=false, searchTerm=term){
     const request=++searchVersion.current;
     setBusy(true);setFailure('');
-    const params=new URLSearchParams({state:autoNearby?'':state,q:term});
+    const params=new URLSearchParams({state:autoNearby?'':state,q:searchTerm});
     if(category)params.set('category',category);
     if(origin){params.set('lat',String(origin.lat));params.set('lon',String(origin.lon));}
     try{
@@ -95,7 +95,7 @@ export function Finder(){
       const result=await api<{valid:boolean;source:string;location:Point|null}>('/postcodes/lookup',json({postcode:code}));
       if(request!==lookupVersion.current)return;
       if(result.location){
-        setPoint(result.location);setState('');void search(result.location,true);
+        setPoint(result.location);setState('');setTerm('');void search(result.location,true,'');
         setLookup(result.source==='local_mock'
           ? t('Local mock postcode matched. Demo coordinates selected.','An samu lambar gwaji. An zaɓi wurin gwaji.')
           : t('Postcode matched a directory location. Nearby facilities are ordered by distance.','An samu wurin lambar gidan waya. An tsara cibiyoyi bisa nisa.'));

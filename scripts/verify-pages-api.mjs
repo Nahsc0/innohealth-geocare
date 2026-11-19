@@ -13,6 +13,9 @@ const status = await health.json();
 if (!status.ready || status.mode !== 'sandbox' || status.dispatch_enabled !== false) {
   throw new Error('Expected a ready GeoCare sandbox with dispatch disabled.');
 }
+if (status.registration_configured !== true) {
+  throw new Error('Configure the Google Apps Script registration registry on the hosted API before publishing.');
+}
 const preflight = await request('/v1/incidents', {method:'OPTIONS',headers:{
   Origin:site.origin,
   'Access-Control-Request-Method':'POST',
@@ -24,8 +27,7 @@ if (!preflight.ok || preflight.headers.get('access-control-allow-origin') !== si
   throw new Error('Configure the FastAPI CORS allowlist for the exact Pages origin.');
 }
 const directory = await request('/v1/facilities?state=Kaduna', {headers:{Origin:site.origin}});
-if (!directory.ok || directory.headers.get('access-control-allow-origin') !== site.origin ||
-    !Array.isArray(await directory.json())) {
-  throw new Error('The hosted facility directory did not pass the Pages smoke check.');
+if (directory.status !== 401 || directory.headers.get('access-control-allow-origin') !== site.origin) {
+  throw new Error('The hosted facility directory must require sign-in and allow the Pages origin.');
 }
 console.log('GeoCare sandbox API and Pages CORS verified.');

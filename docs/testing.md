@@ -2,7 +2,7 @@
 
 From the repository root, install `backend/requirements.txt` and run `python -m pytest backend/tests -q`. Tests use a disposable SQLite database by default. To check PostGIS, set `TEST_DATABASE_URL` to a fresh disposable database where the test account can create PostGIS, then rerun the same command. CI defines both jobs.
 
-With the local API running on port 8000 and using an empty directory, run these commands from `frontend`:
+Run the local API on port 8000 with an empty directory. Set `GEOCARE_DEV_MAILBOX` to the same absolute path in the API and Playwright shells, using an ignored file such as `.deps/test-mail.jsonl`. The browser tests use synthetic addresses and read codes from this file. Run these commands from `frontend`:
 
 ```sh
 npm ci
