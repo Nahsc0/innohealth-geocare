@@ -1,8 +1,10 @@
 'use client';
+import Image from 'next/image';
 import Link from 'next/link';
 import {usePathname} from 'next/navigation';
 import {Activity, Globe2, HeartPulse, LockKeyhole, MapPin, Phone, Search} from 'lucide-react';
 import {useLanguage} from './language';
+import innoHealthLogo from '@/public/brand/innohealth-logo.webp';
 
 export function Shell({children}:{children:React.ReactNode}) {
   const {t,toggle,lang}=useLanguage();
@@ -10,7 +12,10 @@ export function Shell({children}:{children:React.ReactNode}) {
   return <>
     <a className="skip" href="#main">{t('Skip to content','Tsallaka zuwa babban sashe')}</a>
     <header className="top"><div className="wrap mast">
-      <Link className="brand" href="/"><span className="brand-mark"><Activity size={24}/></span><span>InnoHealth <b>GeoCare</b></span></Link>
+      <Link className="brand" href="/">
+        <Image className="brand-logo" src={innoHealthLogo} alt="InnoHealth Technologies" unoptimized priority/>
+        <span className="brand-product">GeoCare</span>
+      </Link>
       <nav aria-label={t('Main navigation','Babban menu')}>
         <Link href="/find" aria-current={path==='/find'?'page':undefined}>{t('Find healthcare','Nemo cibiyar lafiya')}</Link>
         <Link href="/emergency" aria-current={path==='/emergency'?'page':undefined}>{t('Emergency','Gaggawa')}</Link>
@@ -23,8 +28,28 @@ export function Shell({children}:{children:React.ReactNode}) {
       <a href="tel:112"><Phone size={15}/>{t('Call 112 in Nigeria','Kira 112 a Najeriya')}</a></div></aside>
     {process.env.NEXT_PUBLIC_GEOCARE_PREVIEW==='1'&&<div className="wrap"><p className="notice">{t('Frontend preview. Facility search, incident tracking and partner services are offline while hosting is set up.','Wannan samfotin shafi ne. Binciken cibiyoyi, bin diddigin buƙatu da ayyukan abokan hulɗa suna jiran kunna sabar.')}</p></div>}
     <main id="main">{children}</main>
-    <footer className="foot"><div className="wrap footer-inner"><div><strong>InnoHealth GeoCare</strong><p>{t('Powered by InnoHealth Africa Technologies Ltd','InnoHealth Africa Technologies Ltd ce ke gudanarwa')}</p></div>
-    <div className="footer-links"><Link href="/privacy">{t('Privacy','Sirri')}</Link><Link href="/terms">{t('Terms','Sharuɗɗa')}</Link><a href="https://ncc.gov.ng/media/836/view">{t('112 source','Tushen bayanin 112')}</a></div></div></footer>
+    <footer className="foot">
+      <div className="wrap footer-inner">
+        <div className="footer-company">
+          <strong>InnoHealth GeoCare</strong>
+          <p>{t('Powered by InnoHealth Africa Technologies Ltd','InnoHealth Africa Technologies Ltd ce ke gudanarwa')}</p>
+          <a className="footer-email" href="mailto:admin@innohealthafrica.org">admin@innohealthafrica.org</a>
+        </div>
+        <nav className="footer-social" aria-label={t('InnoHealth Technologies social media','Kafafen sada zumunta na InnoHealth Technologies')}>
+          <strong>InnoHealth Technologies</strong>
+          <ul className="footer-links">
+            <li><a href="https://www.linkedin.com/company/innohealthtechnologies/">LinkedIn</a></li>
+            <li><a href="https://x.com/InnohealthTechs">X</a></li>
+            <li><a href="https://www.facebook.com/profile.php?id=61587705212859">Facebook</a></li>
+          </ul>
+        </nav>
+        <nav className="footer-links" aria-label={t('Site policies and emergency information','Sharuɗɗan shafi da bayanan gaggawa')}>
+          <Link href="/privacy">{t('Privacy','Sirri')}</Link>
+          <Link href="/terms">{t('Terms','Sharuɗɗa')}</Link>
+          <a href="https://ncc.gov.ng/media/836/view">{t('112 source','Tushen bayanin 112')}</a>
+        </nav>
+      </div>
+    </footer>
   </>;
 }
 
