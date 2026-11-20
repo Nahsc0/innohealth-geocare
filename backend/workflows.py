@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from .core import audit, digest, now, one, query, reveal, rows, seal, transaction, uid
 from .directory import Point
 from .postcodes import normalize
-from .security import limit, roles
+from .security import current_user, limit, roles
 
 router = APIRouter(prefix="/v1")
 Dispatcher = Depends(roles("dispatcher", "admin"))
@@ -26,7 +26,7 @@ class Incident(BaseModel):
     landmark: str | None = Field(default=None, max_length=280)
     synthetic: Literal[True]
 
-@router.post("/incidents", status_code=201)
+@router.post("/incidents", status_code=201, dependencies=[Depends(current_user)])
 def submit(body: Incident, request: Request, retry_key: str | None = Header(None, alias="X-Tracking-Key", pattern=r"^[A-Za-z0-9_-]{36,64}$")):
     limit(request, "incident", 10)
     data = body.model_dump(exclude={"category", "synthetic"})
@@ -50,7 +50,7 @@ def submit(body: Incident, request: Request, retry_key: str | None = Header(None
         audit(db, None, "incident.submitted", record_id)
     return {"id": record_id, "tracking_key": key, "status": "submitted", "dispatch_enabled": False}
 
-@router.post("/incidents/{record_id}/track")
+@router.post("/incidents/{record_id}/track", dependencies=[Depends(current_user)])
 def track(record_id: str, request: Request, tracking_key: str = Header("", alias="X-Tracking-Key", max_length=100)):
     limit(request, "track", 45)
     with transaction() as db:

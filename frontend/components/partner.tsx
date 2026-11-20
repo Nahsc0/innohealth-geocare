@@ -2,15 +2,15 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {usePathname,useRouter} from 'next/navigation';
-import {FormEvent,useCallback,useEffect,useState} from 'react';
-import {api, Facility, json, Point, setToken} from '@/lib/api';
+import {useCallback,useEffect,useState} from 'react';
+import {api, Facility, json, Point} from '@/lib/api';
 import {AccessAnalysis,CommunityEditor} from './access';
 import {AreaEditor,CoverageReport} from './coverage';
 import {Applications,SheetSnapshot} from './signup';
 import {categoryEntries, errorText, Notice, PageHeading, statusNames} from './public';
+import {AccountAccess, useSession, type User} from './session';
 
 const MapView=dynamic(()=>import('./map'),{ssr:false});
-type User={id:string;email:string;role:string;org_id:string};
 type Organisation={id:string;name:string;verified:number};
 type PartnerUser=User&{active:number};
 const areas=[
@@ -26,40 +26,19 @@ function PartnerLinks({user}:{user:User}){
 }
 export function Login(){
   const router=useRouter();
-  const [user,setUser]=useState<User>(),[error,setError]=useState(''),[busy,setBusy]=useState(false);
-  useEffect(()=>{api<User>('/me').then(setUser).catch(()=>{});},[]);
-  async function submit(e:FormEvent<HTMLFormElement>){
-    e.preventDefault();setBusy(true);setError('');
-    const form=new FormData(e.currentTarget);
-    try{
-      const result=await api<{token:string;role:string}>('/login',json({email:form.get('email'),password:form.get('password')}));
-      setToken(result.token);
-      router.push(areas.find(a=>a.roles.includes(result.role))?.href||'/partner');
-    }catch(err){setError(errorText(err));}
-    finally{setBusy(false);}
-  }
-  return <div className="wrap page"><PageHeading title="Partner login" detail="Sign in with a verified sandbox partner account."/>
-    {user?<div className="card stack">Signed in as {user.email}<PartnerLinks user={user}/></div>:<form className="card narrow stack" onSubmit={submit}>
-      <label>Email<input autoComplete="username" type="email" name="email" required maxLength={254}/></label><label>Password<input type="password" name="password" autoComplete="current-password" required maxLength={256}/></label>
-      <button className="button primary" disabled={busy}>{busy?'Signing in…':'Sign in'}</button><Notice error text={error}/>
-      <Link className="button outline" href="/partner/signup">Create a partner account</Link>
-    </form>}</div>;
+  const {user,checking}=useSession();
+  if(checking)return <div className="wrap page"><Notice text="Checking your session…"/></div>;
+  if(!user)return <AccountAccess partner onLogin={account=>router.push(areas.find(a=>a.roles.includes(account.role))?.href||'/find')}/>;
+  return <div className="wrap page"><PageHeading title="Partner workspace" detail={`Signed in as ${user.email}`}/>
+    {user.role==='individual'?<Link className="button outline" href="/partner/signup">Create a partner account</Link>:<PartnerLinks user={user}/>}
+  </div>;
 }
 export function Workspace(){
   const path=usePathname().replace(/\/$/, '') || '/';
-  const router=useRouter();
-  const [user,setUser]=useState<User>(),[error,setError]=useState(''),[checking,setChecking]=useState(true);
+  const {user}=useSession();
   const area=areas.find(a=>a.href===path);
-  useEffect(()=>{api<User>('/me').then(setUser).catch(e=>setError(errorText(e))).finally(()=>setChecking(false));},[]);
-  async function logout(){
-    try{await api('/logout',{method:'POST'});setToken('');router.push('/partner');}
-    catch(e){setError(errorText(e));}
-  }
   return <div className="wrap page"><PageHeading title={area?.label||'Partner workspace'} detail="Sandbox workspace for authorised partners. Use synthetic patient details only."/>
-    {checking&&<Notice text="Checking your session…"/>}
-    {!checking&&!user&&<><Notice error text={error}/><Link className="button primary" href="/partner">Go to partner login</Link></>}
-    {user&&<><div className="toolbar"><span>{user.email} · {user.role}</span><button className="button outline small" onClick={logout}>Sign out</button></div><PartnerLinks user={user}/>
-      <Notice error text={error}/>
+    {user&&<><p>{user.email} · {user.role}</p><PartnerLinks user={user}/>
       {!area?.roles.includes(user.role)?<Notice error text="Your account does not have access to this workspace."/>:
         path==='/dispatch'?<Dispatch user={user}/>:path==='/referrals'?<Referrals user={user}/>:path==='/analytics'?<Analytics/>:path==='/admin'?<Admin/>:<FacilityDashboard/>}
     </>}
@@ -211,13 +190,15 @@ function Analytics(){
 
 type Draft=Omit<Facility,'verified_at'>&{verified_at:string|null;org_id:string|null};
 type Audit={id:string;action:string;entity:string;created:number;actor:string|null};
+type MonthlyActivity={month:string;counts:{month:string;active_users:number}[]};
 function Admin(){
   const [orgs,setOrgs]=useState<Organisation[]>([]),[users,setUsers]=useState<PartnerUser[]>([]),[drafts,setDrafts]=useState<Draft[]>([]);
   const [audit,setAudit]=useState<Audit[]>([]),[days,setDays]=useState(30),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
   const [orgEdit,setOrgEdit]=useState<Organisation>(),[draft,setDraft]=useState<Draft>();
+  const [activity,setActivity]=useState<MonthlyActivity>();
   const refresh=useCallback(async()=>{
-    const [o,u,f,a,s]=await Promise.all([api<Organisation[]>('/admin/organisations'),api<PartnerUser[]>('/admin/users'),api<Draft[]>('/admin/facilities'),api<Audit[]>('/admin/audit'),api<{retention_days:number}>('/admin/settings')]);
-    setOrgs(o);setUsers(u);setDrafts(f);setAudit(a);setDays(s.retention_days);
+    const [o,u,f,a,s,m]=await Promise.all([api<Organisation[]>('/admin/organisations'),api<PartnerUser[]>('/admin/users'),api<Draft[]>('/admin/facilities'),api<Audit[]>('/admin/audit'),api<{retention_days:number}>('/admin/settings'),api<MonthlyActivity>('/admin/monthly-activity')]);
+    setOrgs(o);setUsers(u);setDrafts(f);setAudit(a);setDays(s.retention_days);setActivity(m);
   },[]);
   useEffect(()=>{refresh().catch(e=>setError(errorText(e)));},[refresh]);
   async function save(action:()=>Promise<unknown>){
@@ -225,6 +206,11 @@ function Admin(){
     try{await action();setNotice('Saved.');await refresh();}catch(e){setError(errorText(e));}finally{setBusy(false);}
   }
   return <div className="stack"><Notice error text={error}/><Notice text={notice}/>
+    <section className="card stack"><h2>Monthly active users</h2>
+      <p>Each account counts once per UTC calendar month, including partners and individual users.</p>
+      {activity&&<><strong>{activity.month} · {activity.counts.find(row=>row.month===activity.month)?.active_users??0} active users</strong>
+        {activity.counts.filter(row=>row.month!==activity.month).map(row=><span key={row.month}>{row.month} · {row.active_users} active users</span>)}</>}
+    </section>
     <div className="layout"><section className="card stack"><h2>Partner organisations</h2>
       {orgs.map(o=><button className="button outline" key={o.id} onClick={()=>setOrgEdit(o)}>{o.name} · {o.verified?'Sandbox verified':'Pending'}</button>)}
       <button className="button outline" onClick={()=>setOrgEdit(undefined)}>New organisation</button>

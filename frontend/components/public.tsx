@@ -4,7 +4,7 @@ import Link from 'next/link';
 import {useSearchParams} from 'next/navigation';
 import {Crosshair, MapPin, Phone, Search} from 'lucide-react';
 import {FormEvent,useEffect,useRef,useState} from 'react';
-import {api,coordinates,Facility,json,Point} from '@/lib/api';
+import {api,coordinates,demoMode,demoPostcode,Facility,json,Point} from '@/lib/api';
 import {useLanguage} from './language';
 
 const MapView=dynamic(()=>import('./map'),{ssr:false,loading:()=> <p role="status">…</p>});
@@ -17,7 +17,7 @@ export const categories = {
   pharmacy:['Pharmacies','Kantunan magani'],
   laboratory:['Laboratories','Dakunan gwaje-gwaje'],
 };
-const states=['Kaduna','Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno','Cross River','Delta','Ebonyi','Edo','Ekiti','Enugu','FCT','Gombe','Imo','Jigawa','Kano','Katsina','Kebbi','Kogi','Kwara','Lagos','Nasarawa','Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara'];
+export const states=['Kaduna','Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno','Cross River','Delta','Ebonyi','Edo','Ekiti','Enugu','FCT','Gombe','Imo','Jigawa','Kano','Katsina','Kebbi','Kogi','Kwara','Lagos','Nasarawa','Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara'];
 export const categoryEntries=Object.entries(categories);
 export const statusNames:Record<string,[string,string]>={
   submitted:['Submitted','An aika'],
@@ -70,11 +70,11 @@ export function Finder(){
     searchVersion.current++;
     setResults([]);setLoaded(false);setBusy(false);setFailure('');
   }
-  async function search(origin:Point|null, autoNearby=false){
+  async function search(origin:Point|null, autoNearby=false, searchTerm=term, facilityType=category){
     const request=++searchVersion.current;
     setBusy(true);setFailure('');
-    const params=new URLSearchParams({state:autoNearby?'':state,q:term});
-    if(category)params.set('category',category);
+    const params=new URLSearchParams({state:autoNearby?'':state,q:searchTerm});
+    if(facilityType)params.set('category',facilityType);
     if(origin){params.set('lat',String(origin.lat));params.set('lon',String(origin.lon));}
     try{
       const matches=await api<Facility[]>('/facilities?'+params);
@@ -87,15 +87,14 @@ export function Finder(){
     lookupVersion.current++;setChecking(false);setLookup('');
     setPoint(origin);setState('');clearResults();void search(origin,true);
   }
-  async function check(e:FormEvent){
-    e.preventDefault();
+  async function check(postcode:string, facilityType=category){
     const request=++lookupVersion.current;
     setChecking(true);setLookup('');setPoint(null);if(!state)setState('Kaduna');clearResults();
     try{
-      const result=await api<{valid:boolean;source:string;location:Point|null}>('/postcodes/lookup',json({postcode:code}));
+      const result=await api<{valid:boolean;source:string;location:Point|null}>('/postcodes/lookup',json({postcode}));
       if(request!==lookupVersion.current)return;
       if(result.location){
-        setPoint(result.location);setState('');void search(result.location,true);
+        setPoint(result.location);setState('');setTerm('');void search(result.location,true,'',facilityType);
         setLookup(result.source==='local_mock'
           ? t('Local mock postcode matched. Demo coordinates selected.','An samu lambar gwaji. An zaɓi wurin gwaji.')
           : t('Postcode matched a directory location. Nearby facilities are ordered by distance.','An samu wurin lambar gidan waya. An tsara cibiyoyi bisa nisa.'));
@@ -109,11 +108,12 @@ export function Finder(){
     }finally{if(request===lookupVersion.current)setChecking(false);}
   }
   return <div className="wrap page">
-    <PageHeading title={t('Find healthcare','Nemo cibiyar lafiya')} detail={t('Search verified directory entries by name, local government area or distance.','Nemi cibiyoyin da aka tabbatar da su ta suna, ƙaramar hukuma ko nisa.')}/>
+    <PageHeading title={t('Find healthcare','Nemo cibiyar lafiya')} detail={demoMode?t('Try the Kaduna sample postcode to see nearby demo facilities.','Gwada lambar gidan waya ta Kaduna don ganin cibiyoyin misali da ke kusa.'):t('Search verified directory entries by name, local government area or distance.','Nemi cibiyoyin da aka tabbatar da su ta suna, ƙaramar hukuma ko nisa.')}/>
     <div className="layout"><section className="card stack"><h2>{t('Choose a location','Zaɓi wuri')}</h2>
-      <form className="stack" onSubmit={check}><label>{t('Digital postcode','Lambar gidan waya ta dijital')}<input value={code} maxLength={32} onChange={e=>{lookupVersion.current++;setChecking(false);setCode(e.target.value);setPoint(null);if(!state)setState('Kaduna');setLookup('');clearResults();}} placeholder="AA-01-A01-AA-01"/></label>
+      <form className="stack" onSubmit={e=>{e.preventDefault();void check(code);}}><label>{t('Digital postcode','Lambar gidan waya ta dijital')}<input value={code} maxLength={32} onChange={e=>{lookupVersion.current++;setChecking(false);setCode(e.target.value);setPoint(null);if(!state)setState('Kaduna');setLookup('');clearResults();}} placeholder="AA-01-A01-AA-01"/></label>
       <button className="button outline" type="submit" disabled={!code.trim()||checking}>{checking?t('Checking…','Ana dubawa…'):t('Check postcode and find nearby','Duba lambar gidan waya ka nemo na kusa')}</button>
-      </form><Notice text={lookup}/><LocationFields point={point} onPoint={selectPoint}/>
+      </form>{demoMode&&<button className="button ghost" type="button" disabled={checking} onClick={()=>{setCode(demoPostcode);setCategory('');void check(demoPostcode,'');}}>{t('Use sample postcode','Yi amfani da lambar gwaji')} · {demoPostcode}</button>}
+      <Notice text={lookup}/><LocationFields point={point} onPoint={selectPoint}/>
       <button className="button outline" type="button" onClick={()=>setShowMap(v=>!v)}><MapPin size={17}/>{showMap?t('Hide map','Ɓoye taswira'):t('Open map to select a point','Buɗe taswira don zaɓar wuri')}</button>
       {point&&<button className="button ghost" onClick={()=>{setPoint(null);if(!state)setState('Kaduna');setLookup('');clearResults();}}>{t('Clear selected location','Cire wurin da aka zaɓa')}</button>}
     </section><section className="card stack">
@@ -124,7 +124,7 @@ export function Finder(){
       <label>{t('Name or LGA','Suna ko ƙaramar hukuma')}<input maxLength={100} value={term} onChange={e=>setTerm(e.target.value)}/></label>
       <button className="button primary" disabled={busy}><Search size={18}/>{busy?t('Searching…','Ana nema…'):t('Search directory','Bincika kundin')}</button></form>
       <Notice text={failure} error/>
-      {loaded&&results.length===0&&!failure&&<Notice text={t('No verified facilities matched this search.','Babu cibiyar da aka tabbatar da ta dace da binciken.')}/>}
+      {loaded&&results.length===0&&!failure&&<Notice text={demoMode?t('No demo facilities match. Try the sample Kaduna postcode.','Babu cibiyar gwaji da ta dace. Gwada lambar Kaduna.') : t('No verified facilities matched this search.','Babu cibiyar da aka tabbatar da ta dace da binciken.')}/>}
       {results.map(f=><div className="record" key={f.id}><Link href={{pathname:'/facilities',query:{id:f.id}}}><strong>{f.name}</strong></Link><span className="muted">{f.lga}, {f.state}{f.distance_km!==undefined?' · '+f.distance_km.toFixed(1)+' km':''}</span></div>)}
     </section></div>
   </div>;
@@ -146,12 +146,12 @@ export function FacilityDetails(){
     {failure&&<Notice error text={t('Facility details are unavailable.','Ba a samu bayanan cibiyar ba.')}/>}
     {!record&&!failure&&<p role="status">{t('Loading…','Ana lodawa…')}</p>}
     {record&&<><PageHeading title={record.name} detail={record.lga+', '+record.state}/><div className="layout"><section className="card stack">
-      <p>{t('Last verified','Ranar tabbatarwa')} · {record.verified_at}</p>
+      {demoMode?<p>{t('Synthetic facility for testing.','Cibiyar misali don gwaji.')}</p>:<p>{t('Last verified','Ranar tabbatarwa')} · {record.verified_at}</p>}
       {[[t('Type','Nau’i'),categories[record.category as keyof typeof categories]?t(...categories[record.category as keyof typeof categories] as [string,string]):record.category],[t('Ward','Mazaba'),record.ward],[t('Postcode','Lambar gidan waya'),record.postcode],[t('Ownership','Mai cibiyar'),record.ownership],[t('Services','Ayyuka'),record.services],[t('Hours','Lokutan aiki'),record.hours]].map(([label,value])=><p key={label}><strong>{label}</strong> · {value||t('Unavailable','Babu bayani')}</p>)}
       <p><strong>{t('Verified phone','Tabbatacciyar lambar waya')}</strong> · {record.phone?<a href={'tel:'+record.phone.replace(/[^+0-9]/g,'')}>{record.phone}</a>:t('Unavailable','Babu bayani')}</p>
-      <a className="button outline" href={record.source} rel="noreferrer">{t('View verification source','Duba tushen bayanai')}</a>
+      {!demoMode&&<a className="button outline" href={record.source} rel="noreferrer">{t('View verification source','Duba tushen bayanai')}</a>}
       </section><section className="card stack"><h2>{t('Road travel estimate','Ƙiyasin tafiya ta hanya')}</h2>
-      <LocationFields point={point} onPoint={setPoint}/><button className="button primary" disabled={!point||routing} onClick={estimate}>{t('Estimate route','Ƙiyasta tafiya')}</button><Notice text={route}/>
+      {demoMode?<p>{t('Road estimates require the hosted routing service.','Ƙiyasin hanya yana bukatar sabar hanyoyi.')}</p>:<><LocationFields point={point} onPoint={setPoint}/><button className="button primary" disabled={!point||routing} onClick={estimate}>{t('Estimate route','Ƙiyasta tafiya')}</button><Notice text={route}/></>}
       {record.lat!==null&&record.lon!==null&&<><button className="button outline" onClick={()=>setMap(v=>!v)}>{t('Toggle map','Buɗe ko rufe taswira')}</button>{map&&<MapView point={point} onPick={setPoint} markers={[{lat:record.lat,lon:record.lon}]}/>}</>}
       </section></div></>}
   </div>;

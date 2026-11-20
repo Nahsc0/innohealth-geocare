@@ -1,9 +1,11 @@
 name: Deploy GeoCare to GitHub Pages
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       preview:
-        description: Publish the labelled frontend preview while the sandbox API is being set up
+        description: Publish the signed-in synthetic directory demo
         type: boolean
         default: false
 permissions:
@@ -15,6 +17,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' || vars.GEOCARE_API_URL == ''
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -33,7 +36,7 @@ jobs:
       - run: npm test
         working-directory: frontend
       - name: Verify the hosted sandbox API and Pages origin
-        if: ${{ !inputs.preview }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.preview }}
         run: node scripts/verify-pages-api.mjs
         env:
           GEOCARE_SITE_URL: ${{ steps.pages.outputs.base_url }}
@@ -42,7 +45,7 @@ jobs:
         working-directory: frontend
         env:
           GEOCARE_PAGES: '1'
-          NEXT_PUBLIC_GEOCARE_PREVIEW: ${{ inputs.preview && '1' || '0' }}
+          NEXT_PUBLIC_GEOCARE_PREVIEW: ${{ (github.event_name == 'push' || inputs.preview) && '1' || '0' }}
           GEOCARE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
           NEXT_PUBLIC_API_URL: ${{ vars.GEOCARE_API_URL }}
           NEXT_PUBLIC_TILE_URL: ${{ vars.GEOCARE_TILE_URL }}
