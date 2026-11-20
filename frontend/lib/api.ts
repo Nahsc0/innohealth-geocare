@@ -9,8 +9,10 @@ export type Facility = {
 export class ApiError extends Error {
   constructor(public status:number, message:string) { super(message); }
 }
+export const demoMode = process.env.NEXT_PUBLIC_GEOCARE_PREVIEW === '1';
+export const demoPostcode = 'ZZ-01-A01-ZZ-01';
 let token = '';
-const sessionKey = 'geocare-session';
+const sessionKey = demoMode?'geocare-demo-session':'geocare-session';
 export const sessionExpired = 'geocare-session-expired';
 export function savedToken() {
   try { return sessionStorage.getItem(sessionKey) || ''; } catch { return ''; }
@@ -24,8 +26,9 @@ export function setToken(value:string) {
 }
 
 export async function api<T>(path:string, options:RequestInit = {}):Promise<T> {
-  if (process.env.NEXT_PUBLIC_GEOCARE_PREVIEW === '1') {
-    throw new ApiError(503,'The GeoCare backend is offline in this frontend preview.');
+  if (demoMode) {
+    const {demoRequest}=await import('./demo');
+    return demoRequest(path,options,token) as T;
   }
   const headers = new Headers(options.headers);
   if (options.body) headers.set('Content-Type','application/json');

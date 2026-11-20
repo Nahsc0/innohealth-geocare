@@ -1,14 +1,15 @@
 'use client';
 import Link from 'next/link';
+import {useRouter} from 'next/navigation';
 import {createContext, FormEvent, useContext, useEffect, useState} from 'react';
-import {api, ApiError, json, savedToken, sessionExpired, setToken} from '@/lib/api';
+import {api, ApiError, demoMode, json, savedToken, sessionExpired, setToken} from '@/lib/api';
 import {errorText, Notice, PageHeading, states} from './public';
 import {useLanguage} from './language';
 
 export type User = {id:string; email:string; role:string; org_id:string};
 type Session = {user?:User; checking:boolean; error:string; check:()=>Promise<void>;
   authenticate:(credentials:Record<string,FormDataEntryValue>,register:boolean)=>Promise<User>;
-  logout:()=>Promise<void>};
+  openDemo:()=>Promise<User>; logout:()=>Promise<void>};
 const SessionContext = createContext<Session|null>(null);
 
 export function SessionProvider({children}:{children:React.ReactNode}) {
@@ -30,8 +31,8 @@ export function SessionProvider({children}:{children:React.ReactNode}) {
     return ()=>window.removeEventListener(sessionExpired,expire);
   },[]);
 
-  async function authenticate(credentials:Record<string,FormDataEntryValue>,register:boolean){
-    const result=await api<{token:string}>(register?'/register':'/login',json(credentials));
+  async function startSession(path:string,options:RequestInit){
+    const result=await api<{token:string}>(path,options);
     setToken(result.token);
     try{
       const account=await api<User>('/me');
@@ -44,7 +45,10 @@ export function SessionProvider({children}:{children:React.ReactNode}) {
     finally{setToken('');setUser(undefined);setError('');}
   }
 
-  return <SessionContext.Provider value={{user,checking,error,check,authenticate,logout}}>{children}</SessionContext.Provider>;
+  return <SessionContext.Provider value={{user,checking,error,check,logout,
+    authenticate:(credentials,register)=>startSession(register?'/register':'/login',json(credentials)),
+    openDemo:()=>startSession('/demo/session',{method:'POST'}),
+  }}>{children}</SessionContext.Provider>;
 }
 
 export function useSession(){
@@ -55,7 +59,8 @@ export function useSession(){
 
 export function AccountAccess({partner=false,onLogin}:{partner?:boolean;onLogin?:(user:User)=>void}) {
   const {t}=useLanguage();
-  const {authenticate}=useSession();
+  const {authenticate,openDemo}=useSession();
+  const router=useRouter();
   const [registration,setRegistration]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [email,setEmail]=useState(''),[challenge,setChallenge]=useState(''),[notice,setNotice]=useState('');
   const title=partner?t('Partner login','Shigar abokan aiki'):registration?t('Create an individual account','Ƙirƙiri asusun mutum'):t('Sign in to GeoCare','Shiga GeoCare');
@@ -82,6 +87,18 @@ export function AccountAccess({partner=false,onLogin}:{partner?:boolean;onLogin?
     catch(err){setError(errorText(err));}
     finally{setBusy(false);}
   }
+  async function signInToDemo(){
+    setBusy(true);setError('');
+    try{await openDemo();router.push('/find');}
+    catch(err){setError(errorText(err));}
+    finally{setBusy(false);}
+  }
+  if(demoMode)return <div className="wrap page"><PageHeading title={t('Sign in to GeoCare','Shiga GeoCare')}
+    detail={t('Use a demo session to test postcode and facility search in Kaduna.','Yi amfani da asusun gwaji don binciken lambar gidan waya da cibiyoyin Kaduna.')}/>
+    <section className="card narrow stack"><button className="button primary" type="button" onClick={()=>void signInToDemo()} disabled={busy}>{t('Sign in to demo','Shiga gwaji')}</button>
+      <p className="muted">{t('The demo uses sample records and does not ask for personal details. Live sign-up requires the hosted account service.','Gwajin yana amfani da bayanan misali kuma ba ya neman bayananka. Buɗe asusun gaske yana bukatar sabar asusu.')}</p>
+      <Notice error text={error}/>
+    </section></div>;
   return <div className="wrap page"><PageHeading title={title} detail={partner?'Sign in with an approved partner account.':t('Use your account to access facility search and other GeoCare tools.','Yi amfani da asusunka don binciken cibiyoyi da sauran kayan GeoCare.')}/>
     <form className="card narrow stack" key={String(registration)+Boolean(challenge)} onSubmit={submit}>
       <label>{t('Email','Imel')}<input autoComplete="username" type="email" name="email" required maxLength={254} defaultValue={registration?email:undefined} readOnly={registration&&Boolean(challenge)}/></label>

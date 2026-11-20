@@ -1,0 +1,35 @@
+[
+  {
+    "id": "demo-kaduna-01",
+    "name": "DEMO — Kaduna North Primary Care",
+    "state": "Kaduna",
+    "lga": "Kaduna North",
+    "category": "phc",
+    "postcode": "ZZ-01-A01-ZZ-01",
+    "lat": 10.52,
+    "lon": 7.44,
+    "services": "Synthetic directory entry only"
+  },
+  {
+    "id": "demo-kaduna-02",
+    "name": "DEMO — Kaduna South Health Centre",
+    "state": "Kaduna",
+    "lga": "Kaduna South",
+    "category": "phc",
+    "postcode": "ZZ-01-A01-ZZ-02",
+    "lat": 10.492,
+    "lon": 7.433,
+    "services": "Synthetic directory entry only"
+  },
+  {
+    "id": "demo-kaduna-03",
+    "name": "DEMO — Kaduna Maternity Centre",
+    "state": "Kaduna",
+    "lga": "Kaduna North",
+    "category": "maternity",
+    "postcode": "ZZ-01-A01-ZZ-03",
+    "lat": 10.56,
+    "lon": 7.46,
+    "services": "Synthetic directory entry only"
+  }
+]

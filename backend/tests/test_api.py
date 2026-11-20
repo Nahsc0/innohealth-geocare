@@ -388,3 +388,35 @@ def test_signup_email_throttle_expiry_and_attempt_limit(client, monkeypatch):
             registration_email.check_code(address, current, wrong)
     with pytest.raises(Exception, match="incorrect or expired"):
         registration_email.check_code(address, current, correct)
+
+
+def test_hosted_sign_ins_retry_sheet_delivery(client, admin, monkeypatch):
+    from fastapi import HTTPException
+    from backend import security, sign_in_sheet
+
+    monkeypatch.setattr(security, "LOCAL", False)
+    monkeypatch.setattr(security, "limit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(sign_in_sheet, "registry_config", lambda: ("fixture", b"secret"))
+    session = login(client)
+    assert client.get("/v1/me", headers=session).status_code == 200
+    with transaction() as db:
+        event = one(db, "SELECT event_id,account_id,account_role,signed_in FROM sign_in_sheet_queue")
+    assert event["account_role"] == "admin"
+
+    def unavailable(*args, **kwargs):
+        raise HTTPException(503, "Test delivery failure")
+
+    monkeypatch.setattr(sign_in_sheet, "registry_call", unavailable)
+    with pytest.raises(HTTPException, match="Test delivery failure"):
+        sign_in_sheet.sync_sign_ins()
+    with transaction() as db:
+        assert one(db, "SELECT COUNT(*) AS count FROM sign_in_sheet_queue")["count"] == 1
+
+    def delivered(config, action, account, events):
+        assert action == "record_sign_ins" and account == event["account_id"]
+        assert events == [event]
+
+    monkeypatch.setattr(sign_in_sheet, "registry_call", delivered)
+    sign_in_sheet.sync_sign_ins()
+    with transaction() as db:
+        assert one(db, "SELECT COUNT(*) AS count FROM sign_in_sheet_queue")["count"] == 0

@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from .core import audit, digest, now, one, query, transaction
+from .core import LOCAL, audit, digest, now, one, query, transaction, uid
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -29,6 +29,10 @@ def issue_session(db, account):
         raise HTTPException(401, "Sign in required")
     record_activity(db, account, activity_month(timestamp))
     audit(db, account, "session.created", account)
+    if not LOCAL:
+        query(db, """INSERT INTO sign_in_sheet_queue (event_id,account_id,account_role,signed_in)
+            SELECT :event,id,role,:signed FROM users WHERE id=:account""",
+            event=uid(), account=account, signed=timestamp)
     return token
 
 def limit(request: Request, group: str, maximum: int, period=60, per_client=True):

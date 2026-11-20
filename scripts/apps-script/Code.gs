@@ -1,5 +1,7 @@
 const REGISTRY_TAB = 'Account credentials';
 const REGISTRY_HEADERS = ['account_id', 'account_type', 'encrypted_verifier', 'created_at_utc', 'updated_at_utc'];
+const ACTIVITY_TAB = 'Sign-in activity';
+const ACTIVITY_HEADERS = ['event_id', 'account_id', 'account_role', 'signed_in_at_utc'];
 
 function jsonResponse(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
@@ -23,6 +25,14 @@ function signedRequest(event, secret) {
   if (!Number.isInteger(request.timestamp) || Math.abs(Date.now() / 1000 - request.timestamp) > 90) return null;
   if (typeof request.account !== 'string' || !/^[a-f0-9]{32}$/.test(request.account)) return null;
   if (typeof request.nonce !== 'string' || !/^[a-f0-9]{32}$/.test(request.nonce)) return null;
+  if (request.action === 'record_sign_ins') {
+    const roles = ['individual', 'admin', 'analyst', 'clinician', 'dispatcher', 'responder'];
+    if (!Array.isArray(request.events) || !request.events.length || request.events.length > 16) return null;
+    return request.events.every(event => event && typeof event.event_id === 'string' && /^[a-f0-9]{32}$/.test(event.event_id)
+      && typeof event.account_id === 'string' && /^[a-f0-9]{32}$/.test(event.account_id)
+      && roles.includes(event.account_role) && Number.isSafeInteger(event.signed_in)
+      && event.signed_in > 0 && event.signed_in <= request.timestamp) ? request : null;
+  }
   if (request.action === 'read') return request;
   if (request.action === 'send_code') {
     const validRecipient = typeof request.recipient === 'string' && request.recipient.length <= 254
@@ -32,6 +42,29 @@ function signedRequest(event, secret) {
   if (request.action !== 'store' || !['individual', 'partner'].includes(request.kind)) return null;
   if (typeof request.verifier !== 'string' || !/^gAAAA[A-Za-z0-9_-]{100,700}={0,2}$/.test(request.verifier)) return null;
   return request;
+}
+
+function recordSignIns(workbook, events) {
+  const sheet = workbook.getSheetByName(ACTIVITY_TAB);
+  const headers = sheet.getRange(1, 1, 1, ACTIVITY_HEADERS.length).getValues()[0];
+  if (!ACTIVITY_HEADERS.every((header, index) => header === headers[index])) return false;
+  const lastRow = sheet.getLastRow();
+  const idColumn = lastRow < 2 ? null : sheet.getRange(2, 1, lastRow - 1, 1);
+  const unique = new Set();
+  const values = [];
+  for (const event of events) {
+    if (unique.has(event.event_id)) continue;
+    unique.add(event.event_id);
+    if (idColumn?.createTextFinder(event.event_id).matchEntireCell(true).findNext()) continue;
+    values.push([event.event_id, event.account_id, event.account_role, new Date(event.signed_in * 1000).toISOString()]);
+  }
+  if (values.length) {
+    const needed = lastRow + values.length - sheet.getMaxRows();
+    if (needed > 0) sheet.insertRowsAfter(sheet.getMaxRows(), Math.max(needed, 100));
+    sheet.getRange(lastRow + 1, 1, values.length, ACTIVITY_HEADERS.length).setNumberFormat('@').setValues(values);
+    SpreadsheetApp.flush();
+  }
+  return true;
 }
 
 function doPost(event) {
@@ -52,7 +85,9 @@ function doPost(event) {
           '. It expires in 10 minutes. If you did not request an account, you can ignore this email.'});
         return jsonResponse({ok: true});
       }
-      const sheet = SpreadsheetApp.openById(properties.getProperty('SPREADSHEET_ID')).getSheetByName(REGISTRY_TAB);
+      const workbook = SpreadsheetApp.openById(properties.getProperty('SPREADSHEET_ID'));
+      if (request.action === 'record_sign_ins') return jsonResponse({ok: recordSignIns(workbook, request.events)});
+      const sheet = workbook.getSheetByName(REGISTRY_TAB);
       const lastRow = sheet.getLastRow();
       const headers = sheet.getRange(1, 1, 1, REGISTRY_HEADERS.length).getValues()[0];
       if (!REGISTRY_HEADERS.every((header, index) => header === headers[index])) return jsonResponse({ok: false});

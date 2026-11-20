@@ -5,6 +5,7 @@ import {usePathname} from 'next/navigation';
 import {Activity, Globe2, HeartPulse, LockKeyhole, MapPin, Phone, Search} from 'lucide-react';
 import {useLanguage} from './language';
 import {AccountAccess,useSession} from './session';
+import {demoMode} from '@/lib/api';
 import innoHealthLogo from '@/public/brand/innohealth-logo.webp';
 
 export function Shell({children}:{children:React.ReactNode}) {
@@ -12,6 +13,7 @@ export function Shell({children}:{children:React.ReactNode}) {
   const path=usePathname().replace(/\/$/, '') || '/';
   const {user,checking,error,check,logout}=useSession();
   const publicPage=['/privacy','/terms','/partner','/partner/signup'].includes(path);
+  const showPage=demoMode ? ['/privacy','/terms'].includes(path)||Boolean(user&&['/find','/facilities'].includes(path)) : Boolean(user||publicPage);
   return <>
     <a className="skip" href="#main">{t('Skip to content','Tsallaka zuwa babban sashe')}</a>
     <header className="top"><div className="wrap mast">
@@ -21,17 +23,18 @@ export function Shell({children}:{children:React.ReactNode}) {
       </Link>
       {user&&<nav aria-label={t('Main navigation','Babban menu')}>
         <Link href="/find" aria-current={path==='/find'?'page':undefined}>{t('Find healthcare','Nemo cibiyar lafiya')}</Link>
-        <Link href="/emergency" aria-current={path==='/emergency'?'page':undefined}>{t('Emergency','Gaggawa')}</Link>
-        <Link href="/track" aria-current={path==='/track'?'page':undefined}>{t('Track request','Bibiyi buƙata')}</Link>
+        {!demoMode&&<><Link href="/emergency" aria-current={path==='/emergency'?'page':undefined}>{t('Emergency','Gaggawa')}</Link>
+        <Link href="/track" aria-current={path==='/track'?'page':undefined}>{t('Track request','Bibiyi buƙata')}</Link></>}
       </nav>}
       <div className="top-actions"><button className="button ghost small" onClick={toggle} aria-label={t('Switch to Hausa','Canja zuwa Turanci')}><Globe2 size={16}/>{lang==='en'?'Hausa':'English'}</button>
       {user&&user.role!=='individual'&&<Link className="button outline small" href="/partner"><LockKeyhole size={16}/>{t('Partner workspace','Wurin aikin abokan hulɗa')}</Link>}
-      {user?<button className="button outline small" onClick={()=>void logout().catch(()=>{})}>{t('Sign out','Fita')}</button>:<Link className="button outline small" href="/partner"><LockKeyhole size={16}/>{t('Partner login','Shigar abokan aiki')}</Link>}</div>
+      {user?<button className="button outline small" onClick={()=>void logout().catch(()=>{})}>{t('Sign out','Fita')}</button>:!demoMode&&<Link className="button outline small" href="/partner"><LockKeyhole size={16}/>{t('Partner login','Shigar abokan aiki')}</Link>}</div>
     </div></header>
     <aside className="safety"><div className="wrap safety-inner"><span><strong>{t('Sandbox only','Wurin gwaji kawai')}</strong> · {t('GeoCare cannot dispatch emergency assistance.','GeoCare ba zai iya tura agajin gaggawa ba.')}</span>
       <a href="tel:112"><Phone size={15}/>{t('Call 112 in Nigeria','Kira 112 a Najeriya')}</a></div></aside>
-    {process.env.NEXT_PUBLIC_GEOCARE_PREVIEW==='1'&&<div className="wrap"><p className="notice">{t('Frontend preview. Facility search, incident tracking and partner services are offline while hosting is set up.','Wannan samfotin shafi ne. Binciken cibiyoyi, bin diddigin buƙatu da ayyukan abokan hulɗa suna jiran kunna sabar.')}</p></div>}
-    <main id="main">{user||publicPage?children:checking?<div className="wrap page" role="status">{t('Checking your session…','Ana duba asusunka…')}</div>:
+    {demoMode&&<div className="wrap"><p className="notice">{t('Public demo · Sample Kaduna facilities','Gwajin jama’a · Cibiyoyin misali na Kaduna')}</p></div>}
+    <main id="main">{showPage?children:checking?<div className="wrap page" role="status">{t('Checking your session…','Ana duba asusunka…')}</div>:
+      demoMode&&user?<div className="wrap page"><Link className="button primary" href="/find">{t('Open the demo directory','Buɗe kundin gwaji')}</Link></div>:
       error?<div className="wrap page stack"><p role="alert">{error}</p><button className="button outline" onClick={()=>void check()}>{t('Try again','Sake gwadawa')}</button></div>:<AccountAccess/>}</main>
     <footer className="foot">
       <div className="wrap footer-inner">

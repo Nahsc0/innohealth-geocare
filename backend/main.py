@@ -1,6 +1,7 @@
 """GeoCare staging API. Every incident and referral is a simulation."""
 from collections import Counter
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 import os
 import secrets
 from typing import Literal
@@ -24,13 +25,21 @@ from .postcodes import lookup, normalize
 from .signup import router as signup
 from .sheet_import import router as sheet_import
 from .registration_store import login_verifier, registry_config
+from .sign_in_sheet import sign_in_sheet_worker
 
 @asynccontextmanager
 async def lifespan(_):
     if LOCAL:
         migrate()
         bootstrap()
-    yield
+    worker = asyncio.create_task(sign_in_sheet_worker()) if not LOCAL and os.getenv("APPS_SCRIPT_REGISTRY_URL") else None
+    try:
+        yield
+    finally:
+        if worker is not None:
+            worker.cancel()
+            with suppress(asyncio.CancelledError):
+                await worker
 
 app = FastAPI(title="InnoHealth GeoCare", version="0.1.0", lifespan=lifespan)
 origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")

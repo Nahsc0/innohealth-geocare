@@ -1,33 +1,6 @@
-import {expect,test,type APIRequestContext,type Page} from '@playwright/test';
-import {mkdir,readFile} from 'node:fs/promises';
-
-let visitorToken:string|undefined;
-const testApi='http://127.0.0.1:8000';
-const profile={name:'Synthetic Visitor',age:30,gender:'prefer_not_to_say',state:'FCT',lga:'Gwagwalada',phone:'+2347000000001'};
-async function latestMail(email:string){
-  const mailbox=process.env.GEOCARE_DEV_MAILBOX;
-  if(!mailbox)throw new Error('Set GEOCARE_DEV_MAILBOX on the API and Playwright processes.');
-  const contents=await readFile(mailbox,'utf8').catch(()=> '');
-  return contents.trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)).reverse()
-    .find((item:{recipient:string})=>item.recipient===email) as {challenge:string;code:string}|undefined;
-}
-async function openSignedIn(page:Page,request:APIRequestContext,path:string){
-  if(!visitorToken){
-    const email=`visitor-${Date.now()}@example.invalid`;
-    const codeRequest=await request.post(testApi+'/v1/register/code',{data:{email}});
-    expect(codeRequest.ok()).toBe(true);
-    const mail=await latestMail(email);
-    expect(mail).toBeDefined();
-    const registration=await request.post(testApi+'/v1/register',{data:{
-      email,password:'Synthetic-test-password-42',challenge:mail!.challenge,code:mail!.code,...profile,
-    }});
-    expect(registration.ok()).toBe(true);
-    visitorToken=(await registration.json()).token;
-  }
-  await page.goto(path);
-  await page.evaluate(token=>sessionStorage.setItem('geocare-session',token!),visitorToken);
-  await page.reload();
-}
+import {expect,test} from '@playwright/test';
+import {mkdir} from 'node:fs/promises';
+import {latestMail,openSignedIn,profile,testApi} from './account-fixture';
 
 test('individual signup unlocks direct routes and sign-out locks them again',async({page})=>{
   await page.goto('/find');
@@ -82,7 +55,7 @@ test('mock postcode is labelled and remains usable',async({page,request})=>{
   await openSignedIn(page,request,'/find');
   await page.getByLabel('Digital postcode').fill('ZZ-01-A01-ZZ-01');
   await page.getByRole('button',{name:'Check postcode'}).click();
-  await expect(page.getByRole('status')).toContainText('Local mock postcode matched');
+  await expect(page.getByRole('status').filter({hasText:'Local mock postcode matched'})).toBeVisible();
   await expect(page.getByLabel('Latitude')).toHaveValue('10.52');
 });
 test('simulated incident is saved and privately tracked',async({page,request})=>{

@@ -62,7 +62,7 @@ def migrate():
     with engine.begin() as db:
         if POSTGIS:
             query(db, "SELECT pg_advisory_xact_lock(21670495)")
-        for filename in ["001_schema.sql"] + (["002_postgis.sql"] if POSTGIS else []) + ["003_access.sql", "004_incident_retry.sql", "005_coverage.sql", "006_partner_signup.sql", "007_facility_sheet_entries.sql", "008_visitor_accounts.sql", "009_verified_registration.sql"]:
+        for filename in ["001_schema.sql"] + (["002_postgis.sql"] if POSTGIS else []) + ["003_access.sql", "004_incident_retry.sql", "005_coverage.sql", "006_partner_signup.sql", "007_facility_sheet_entries.sql", "008_visitor_accounts.sql", "009_verified_registration.sql", "010_sign_in_sheet.sql"]:
             for statement in (ROOT / "migrations" / filename).read_text().split(";"):
                 if statement.strip():
                     query(db, statement)
