@@ -10,6 +10,8 @@ Target a dedicated `Nahsc0/innohealth-geocare` project repository. The default p
 
 The static route for facility details uses `/facilities/?id=...` so newly verified facilities can be opened without rebuilding the frontend. The Pages build uses the base path returned by GitHub.
 
+The Kaduna demo includes Google Maps satellite embeds generated using Google Maps' sharing menu. The connected directory can open any mapped facility in Google Maps satellite view. To also embed satellite imagery for connected facilities, set `GEOCARE_GOOGLE_MAPS_EMBED_KEY` to a browser key restricted to the Pages origin and the Maps Embed API. [Google Maps Embed API setup](https://developers.google.com/maps/documentation/embed/quickstart)
+
 References [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages) and [Next.js static export](https://nextjs.org/docs/app/guides/static-exports).
 
 While `GEOCARE_API_URL` is unset, pushes to `main` publish the labelled demo. You can also choose the preview input when running the workflow manually. Select **Sign in to demo**, then **Use sample postcode** (`ZZ-01-A01-ZZ-01`) for three synthetic Kaduna results. The demo uses a bundled copy of the Facilities tab snapshot and handles search in the browser. Run the workflow with the preview input off after configuring the hosted API and Apps Script to verify and publish a connected build.

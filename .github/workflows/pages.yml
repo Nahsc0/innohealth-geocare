@@ -49,6 +49,7 @@ jobs:
           GEOCARE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
           NEXT_PUBLIC_API_URL: ${{ vars.GEOCARE_API_URL }}
           NEXT_PUBLIC_TILE_URL: ${{ vars.GEOCARE_TILE_URL }}
+          NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY: ${{ vars.GEOCARE_GOOGLE_MAPS_EMBED_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/out
