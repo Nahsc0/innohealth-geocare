@@ -35,10 +35,11 @@ export async function api<T>(path:string, options:RequestInit = {}):Promise<T> {
   const requestToken = token;
   if (requestToken) headers.set('Authorization','Bearer '+requestToken);
   const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const timeout = ['/me','/login','/register/code','/partner/signup','/partner/activate'].includes(path)?75000:12000;
   let response:Response;
   try {
     response = await fetch(base + '/v1' + path, {
-      ...options, headers, cache:'no-store', signal:options.signal || AbortSignal.timeout(12000),
+      ...options, headers, cache:'no-store', signal:options.signal || AbortSignal.timeout(timeout),
     });
   } catch {
     throw new ApiError(0,'Connection unavailable. Check your network and try again.');

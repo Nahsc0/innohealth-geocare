@@ -2,12 +2,12 @@ import {expect,test} from '@playwright/test';
 import {openSignedIn} from './account-fixture';
 
 test.use({launchOptions:{args:['--enable-unsafe-swiftshader']}});
-test('map selection fills coordinates while using only test tiles',async({page,request})=>{
+test('map selection fills coordinates while using only test tiles',async({page})=>{
   const tile=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=','base64');
   await page.route('https://tile.openstreetmap.org/**',route=>route.fulfill({
     status:200,contentType:'image/png',headers:{'Access-Control-Allow-Origin':'*'},body:tile,
   }));
-  await openSignedIn(page,request,'/find');
+  await openSignedIn(page,'/find');
   await page.getByRole('button',{name:'Open map to select a point'}).click();
   const canvas=page.locator('.maplibregl-canvas');
   await expect(canvas).toBeVisible();

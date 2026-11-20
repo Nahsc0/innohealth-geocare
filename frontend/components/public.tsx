@@ -156,7 +156,7 @@ export function FacilityDetails(){
       </section><section className="card stack"><h2>{t('Location','Wuri')}</h2>
       {record.lat!==null&&record.lon!==null&&<>
         <button className="button outline" type="button" aria-expanded={map} onClick={()=>setMap(v=>!v)}>{map?t('Hide satellite map','Ɓoye hoton tauraron ɗan adam'):t('Show satellite map','Nuna hoton tauraron ɗan adam')}</button>
-        {map&&<GoogleSatellite point={{lat:record.lat,lon:record.lon}} demo={demoMode}/>}
+        {map&&<GoogleSatellite point={{lat:record.lat,lon:record.lon}} demo={demoMode||record.id.startsWith('demo-kaduna-')}/>}
       </>}
       {!demoMode&&<><h2>{t('Road travel estimate','Ƙiyasin tafiya ta hanya')}</h2>
         <LocationFields point={point} onPoint={setPoint}/>

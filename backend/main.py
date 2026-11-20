@@ -2,8 +2,10 @@
 from collections import Counter
 import asyncio
 from contextlib import asynccontextmanager, suppress
+from functools import lru_cache
 import os
 import secrets
+from threading import Lock
 from typing import Literal
 
 from argon2.exceptions import VerificationError
@@ -24,7 +26,7 @@ from .security import Account, activity_month, current_user, issue_session, role
 from .postcodes import lookup, normalize
 from .signup import router as signup
 from .sheet_import import router as sheet_import
-from .registration_store import login_verifier, registry_config
+from .registration_store import REGISTRY_SYSTEM_ID, login_verifier, registry_call, registry_config
 from .sign_in_sheet import sign_in_sheet_worker
 
 @asynccontextmanager
@@ -77,6 +79,28 @@ def health():
         registration_configured = False
     return {"ready": True, "dispatch_enabled": False, "mode": "sandbox",
             "registration_configured": registration_configured}
+
+registry_status_lock = Lock()
+
+@lru_cache(maxsize=2)
+def registry_status(period):
+    names = ("registry", "activity", "facilities", "email")
+    try:
+        config = registry_config()
+        status = registry_call(config, "status", REGISTRY_SYSTEM_ID) if config else {}
+    except HTTPException:
+        status = {}
+    return {name: status.get(name) is True for name in names}
+
+@app.get("/health/connected")
+def connected_health():
+    with registry_status_lock:
+        providers = registry_status(now() // 30)
+    with transaction() as db:
+        directory_ready = one(db, "SELECT id FROM facilities WHERE verified_at IS NOT NULL LIMIT 1") is not None
+    ready = not LOCAL and directory_ready and all(providers.values())
+    return JSONResponse(status_code=200 if ready else 503,
+                        content={"ready": ready, "directory_loaded": directory_ready, **providers})
 
 class Postcode(BaseModel):
     postcode: str = Field(min_length=1, max_length=32)

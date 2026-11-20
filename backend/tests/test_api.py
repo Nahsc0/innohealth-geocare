@@ -420,3 +420,37 @@ def test_hosted_sign_ins_retry_sheet_delivery(client, admin, monkeypatch):
     sign_in_sheet.sync_sign_ins()
     with transaction() as db:
         assert one(db, "SELECT COUNT(*) AS count FROM sign_in_sheet_queue")["count"] == 0
+
+
+def test_pages_readiness_and_facility_refresh_use_signed_apps_script(client, admin, monkeypatch):
+    from backend import main, sheet_import
+
+    monkeypatch.delenv("GOOGLE_SHEETS_SPREADSHEET_ID", raising=False)
+    config = ("fixture", b"test-secret")
+    providers = {"registry": True, "activity": True, "facilities": True, "email": False}
+    headers = ["id", "name", "state", "lga", "category", "lat", "lon", "source", "verified_at"]
+
+    def signed(config_value, action, account):
+        assert config_value == config and account == "0" * 32
+        if action == "status":
+            return providers.copy()
+        assert action == "read_facilities"
+        return {"values": [headers, ["registry-facility", "Synthetic registry facility", "FCT", "Synthetic LGA", "phc", 9, 7.4,
+                                      "https://example.invalid/source", "2024-01-01"]]}
+
+    for module in (main, sheet_import):
+        monkeypatch.setattr(module, "registry_config", lambda: config)
+        monkeypatch.setattr(module, "registry_call", signed)
+    monkeypatch.setattr(main, "LOCAL", False)
+    main.registry_status.cache_clear()
+    try:
+        assert client.get("/health/connected").status_code == 503
+        refresh = client.post("/v1/admin/facility-sheet/refresh", headers=admin)
+        assert refresh.status_code == 200 and refresh.json()["imported"] == 1
+        assert client.get("/v1/facilities/registry-facility", headers=admin).status_code == 200
+        providers["email"] = True
+        main.registry_status.cache_clear()
+        ready = client.get("/health/connected")
+        assert ready.status_code == 200 and ready.json()["directory_loaded"] is True
+    finally:
+        main.registry_status.cache_clear()

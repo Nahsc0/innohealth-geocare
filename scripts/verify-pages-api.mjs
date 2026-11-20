@@ -7,14 +7,23 @@ const url = path => new URL(api.href.replace(/\/$/, '') + path);
 const request = (path, options = {}) => fetch(url(path), {
   ...options, signal: AbortSignal.timeout(30000), redirect: 'error',
 });
-const health = await request('/health');
-if (!health.ok) throw new Error('Sandbox API is unavailable.');
-const status = await health.json();
+let status;
+for (let attempt=0; attempt<4 && !status; attempt++) {
+  const health=await request('/health').catch(()=>null);
+  if(health?.ok)status=await health.json();
+  else if(attempt<3)await new Promise(resolve=>setTimeout(resolve,3000));
+}
+if (!status) throw new Error('Sandbox API is unavailable.');
 if (!status.ready || status.mode !== 'sandbox' || status.dispatch_enabled !== false) {
   throw new Error('Expected a ready GeoCare sandbox with dispatch disabled.');
 }
 if (status.registration_configured !== true) {
   throw new Error('Configure the Google Apps Script registration registry on the hosted API before publishing.');
+}
+const connection = await request('/health/connected');
+const connected = await connection.json().catch(()=>({}));
+if (!connection.ok || connected.ready !== true) {
+  throw new Error('The hosted application cannot verify its Google Sheet, email service and loaded facility directory.');
 }
 const preflight = await request('/v1/incidents', {method:'OPTIONS',headers:{
   Origin:site.origin,
