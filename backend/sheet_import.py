@@ -16,6 +16,7 @@ from sqlalchemy import String, bindparam, text
 
 from .core import POSTGIS, audit, query, transaction
 from .directory import Facility
+from .registration_store import REGISTRY_SYSTEM_ID, registry_call, registry_config
 from .security import roles
 
 router = APIRouter(prefix="/v1")
@@ -110,9 +111,15 @@ def sheet_rows(values, headers):
 @router.post("/admin/facility-sheet/refresh")
 def refresh_sheet(user=Depends(roles("admin"))):
     spreadsheet_id = os.getenv("GOOGLE_SHEETS_SPREADSHEET_ID", "").strip()
-    if not spreadsheet_id:
-        raise HTTPException(503, "Google Sheets refresh is not configured on this backend.")
-    values = read_sheet(spreadsheet_id)
+    if spreadsheet_id:
+        values = read_sheet(spreadsheet_id)
+    else:
+        config = registry_config()
+        if config is None:
+            raise HTTPException(503, "Google Sheets refresh is not configured on this backend.")
+        values = registry_call(config, "read_facilities", REGISTRY_SYSTEM_ID).get("values")
+        if not isinstance(values, list):
+            raise HTTPException(503, "The Google Sheets registry did not return the Facilities tab.")
     headers = [str(value).strip() for value in values[0]] if values else []
     records = validate_records(headers, sheet_rows(values[1:], headers), False)
     ids = [record["id"] for record in records]

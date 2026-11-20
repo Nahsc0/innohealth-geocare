@@ -25,6 +25,7 @@ function signedRequest(event, secret) {
   if (!Number.isInteger(request.timestamp) || Math.abs(Date.now() / 1000 - request.timestamp) > 90) return null;
   if (typeof request.account !== 'string' || !/^[a-f0-9]{32}$/.test(request.account)) return null;
   if (typeof request.nonce !== 'string' || !/^[a-f0-9]{32}$/.test(request.nonce)) return null;
+  if (['status', 'read_facilities'].includes(request.action)) return request;
   if (request.action === 'record_sign_ins') {
     const roles = ['individual', 'admin', 'analyst', 'clinician', 'dispatcher', 'responder'];
     if (!Array.isArray(request.events) || !request.events.length || request.events.length > 16) return null;
@@ -67,6 +68,31 @@ function recordSignIns(workbook, events) {
   return true;
 }
 
+function connectedSheetStatus(workbook) {
+  function hasHeaders(name, expected) {
+    const sheet = workbook.getSheetByName(name);
+    if (!sheet) return false;
+    const headers = sheet.getRange(1, 1, 1, expected.length).getValues()[0];
+    return expected.every((header, index) => headers[index] === header);
+  }
+  const facilities = workbook.getSheetByName('Facilities');
+  return jsonResponse({ok: true,
+    registry: hasHeaders(REGISTRY_TAB, REGISTRY_HEADERS),
+    activity: hasHeaders(ACTIVITY_TAB, ACTIVITY_HEADERS),
+    facilities: Boolean(facilities && facilities.getLastRow() > 1),
+    email: MailApp.getRemainingDailyQuota() > 0,
+  });
+}
+
+function facilityValues(workbook) {
+  const sheet = workbook.getSheetByName('Facilities');
+  if (!sheet || sheet.getLastRow() > 1001 || sheet.getLastColumn() > 15) return jsonResponse({ok: false});
+  const zone = workbook.getSpreadsheetTimeZone();
+  const values = sheet.getDataRange().getValues().map(row=>row.map(value=>
+    value instanceof Date ? Utilities.formatDate(value, zone, 'yyyy-MM-dd') : value));
+  return jsonResponse({ok: true, values});
+}
+
 function doPost(event) {
   try {
     const properties = PropertiesService.getScriptProperties();
@@ -86,6 +112,8 @@ function doPost(event) {
         return jsonResponse({ok: true});
       }
       const workbook = SpreadsheetApp.openById(properties.getProperty('SPREADSHEET_ID'));
+      if (request.action === 'status') return connectedSheetStatus(workbook);
+      if (request.action === 'read_facilities') return facilityValues(workbook);
       if (request.action === 'record_sign_ins') return jsonResponse({ok: recordSignIns(workbook, request.events)});
       const sheet = workbook.getSheetByName(REGISTRY_TAB);
       const lastRow = sheet.getLastRow();

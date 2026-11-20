@@ -14,6 +14,7 @@ from .core import LOCAL, now, passwords, reveal, seal
 
 SHEET_VERIFIER = "apps-script:v1"
 INDIVIDUAL_ORG = "geocare-individuals"
+REGISTRY_SYSTEM_ID = "00000000000000000000000000000000"
 
 def registry_config():
     url = os.getenv("APPS_SCRIPT_REGISTRY_URL", "").strip()

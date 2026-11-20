@@ -32,17 +32,17 @@ test('individual signup unlocks direct routes and sign-out locks them again',asy
   await expect(page.getByRole('heading',{name:'Facility directory'})).toBeVisible();
 });
 
-test('signed-in navigation, Hausa and responsive layout',async({page,request})=>{
-  await openSignedIn(page,request,'/');
+test('signed-in navigation, Hausa and responsive layout',async({page})=>{
+  await openSignedIn(page,'/');
   await expect(page.getByRole('heading',{name:'Find healthcare closer to you.'})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.getByRole('button',{name:'Switch to Hausa'}).click();
   await expect(page.locator('html')).toHaveAttribute('lang','ha');
   await expect(page.getByRole('link',{name:'Bibiyi buƙata',exact:true})).toBeVisible();
 });
-test('GPS failure falls back to manual search',async({page,request})=>{
+test('GPS failure falls back to manual search',async({page})=>{
   await page.addInitScript(()=>Object.defineProperty(navigator,'geolocation',{value:{getCurrentPosition:(_:unknown,failure:()=>void)=>failure()}}));
-  await openSignedIn(page,request,'/find');
+  await openSignedIn(page,'/find');
   await page.getByRole('button',{name:'Use my GPS location'}).click();
   await expect(page.locator('main').getByRole('alert')).toContainText('Location unavailable');
   await page.getByLabel('Latitude').fill('10.52');
@@ -51,15 +51,15 @@ test('GPS failure falls back to manual search',async({page,request})=>{
   await page.getByRole('button',{name:'Search directory'}).click();
   await expect(page.getByRole('status')).toContainText('No verified facilities matched');
 });
-test('mock postcode is labelled and remains usable',async({page,request})=>{
-  await openSignedIn(page,request,'/find');
+test('mock postcode is labelled and remains usable',async({page})=>{
+  await openSignedIn(page,'/find');
   await page.getByLabel('Digital postcode').fill('ZZ-01-A01-ZZ-01');
   await page.getByRole('button',{name:'Check postcode'}).click();
   await expect(page.getByRole('status').filter({hasText:'Local mock postcode matched'})).toBeVisible();
   await expect(page.getByLabel('Latitude')).toHaveValue('10.52');
 });
-test('simulated incident is saved and privately tracked',async({page,request})=>{
-  await openSignedIn(page,request,'/emergency');
+test('simulated incident is saved and privately tracked',async({page})=>{
+  await openSignedIn(page,'/emergency');
   await expect(page.getByRole('link',{name:'SOS · Call 112'})).toHaveAttribute('href','tel:112');
   await page.getByLabel('Simulated landmark').fill('Synthetic training location');
   await page.getByLabel('I confirm these details are synthetic.').check();
@@ -73,8 +73,8 @@ test('simulated incident is saved and privately tracked',async({page,request})=>
   await expect(page.getByRole('status')).toContainText('Submitted');
   await expect(page.getByRole('status')).toContainText('No help was dispatched');
 });
-test('failed request on an interrupted connection has no dispatch acknowledgement',async({page,request})=>{
-  await openSignedIn(page,request,'/emergency');
+test('failed request on an interrupted connection has no dispatch acknowledgement',async({page})=>{
+  await openSignedIn(page,'/emergency');
   await page.route('**/v1/incidents',async route=>{
     await new Promise(resolve=>setTimeout(resolve,350));
     await route.abort('internetdisconnected');
@@ -90,16 +90,16 @@ test('partner screens require authentication',async({page})=>{
   await expect(page.getByRole('heading',{name:'Sign in to GeoCare'})).toBeVisible();
   await expect(page.getByRole('heading',{name:'User management'})).toHaveCount(0);
 });
-test('capture the working visitor pages',async({page,request},testInfo)=>{
+test('capture the working visitor pages',async({page},testInfo)=>{
   test.skip(!process.env.GEOCARE_SCREENSHOTS,'Screenshots only on explicit QA runs');
   await mkdir('../docs/screenshots',{recursive:true});
-  await openSignedIn(page,request,'/');
+  await openSignedIn(page,'/');
   for(const [path,slug] of [['/','home'],['/find','finder'],['/emergency','emergency'],['/track','tracking']]){
     await page.goto(path);
     await expect(page.getByRole('heading',{level:1})).toBeVisible();
     await page.screenshot({path:'../docs/screenshots/'+slug+'-'+testInfo.project.name+'.png',fullPage:true,animations:'disabled'});
   }
-  await page.getByRole('button',{name:'Sign out',exact:true}).click();
+  await page.evaluate(()=>sessionStorage.removeItem('geocare-session'));
   await page.goto('/partner');
   await expect(page.getByRole('heading',{name:'Partner login'})).toBeVisible();
   await page.screenshot({path:'../docs/screenshots/partner-login-'+testInfo.project.name+'.png',fullPage:true,animations:'disabled'});

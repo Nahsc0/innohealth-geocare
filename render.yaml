@@ -7,8 +7,7 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
     healthCheckPath: /health
-    dockerCommand: >-
-      sh -c 'python -m backend.core && exec uvicorn backend.main:app --host 0.0.0.0 --port "$PORT" --no-access-log'
+    dockerCommand: /app/backend/start-render.sh
     envVars:
       - key: APP_ENV
         value: staging
