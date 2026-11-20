@@ -5,6 +5,8 @@ import {useSearchParams} from 'next/navigation';
 import {Crosshair, MapPin, Phone, Search} from 'lucide-react';
 import {FormEvent,useEffect,useRef,useState} from 'react';
 import {api,coordinates,demoMode,demoPostcode,Facility,json,Point} from '@/lib/api';
+import {demoSatellitePoint} from '@/lib/google-maps';
+import {GoogleSatellite} from './google-satellite';
 import {useLanguage} from './language';
 
 const MapView=dynamic(()=>import('./map'),{ssr:false,loading:()=> <p role="status">…</p>});
@@ -114,10 +116,11 @@ export function Finder(){
       <button className="button outline" type="submit" disabled={!code.trim()||checking}>{checking?t('Checking…','Ana dubawa…'):t('Check postcode and find nearby','Duba lambar gidan waya ka nemo na kusa')}</button>
       </form>{demoMode&&<button className="button ghost" type="button" disabled={checking} onClick={()=>{setCode(demoPostcode);setCategory('');void check(demoPostcode,'');}}>{t('Use sample postcode','Yi amfani da lambar gwaji')} · {demoPostcode}</button>}
       <Notice text={lookup}/><LocationFields point={point} onPoint={selectPoint}/>
-      <button className="button outline" type="button" onClick={()=>setShowMap(v=>!v)}><MapPin size={17}/>{showMap?t('Hide map','Ɓoye taswira'):t('Open map to select a point','Buɗe taswira don zaɓar wuri')}</button>
+      <button className="button outline" type="button" onClick={()=>setShowMap(v=>!v)}><MapPin size={17}/>{showMap?t('Hide map','Ɓoye taswira'):demoMode?t('Show satellite map','Nuna hoton tauraron ɗan adam'):t('Open map to select a point','Buɗe taswira don zaɓar wuri')}</button>
       {point&&<button className="button ghost" onClick={()=>{setPoint(null);if(!state)setState('Kaduna');setLookup('');clearResults();}}>{t('Clear selected location','Cire wurin da aka zaɓa')}</button>}
     </section><section className="card stack">
-      {showMap&&<MapView point={point} markers={results.flatMap(f=>f.lat===null||f.lon===null?[]:[{lat:f.lat,lon:f.lon}])} onPick={selectPoint} label={t('Facility map','Taswirar cibiyoyin lafiya')}/>}
+      {showMap&&(demoMode?<GoogleSatellite point={demoSatellitePoint(point)} demo/>:
+        <MapView point={point} markers={results.flatMap(f=>f.lat===null||f.lon===null?[]:[{lat:f.lat,lon:f.lon}])} onPick={selectPoint} label={t('Facility map','Taswirar cibiyoyin lafiya')}/>)}
       <h2>{t('Facility directory','Kundin cibiyoyin lafiya')}</h2>
       <form className="stack" onSubmit={e=>{e.preventDefault();void search(point);}}><div className="form-row"><label>{t('State','Jiha')}<select value={state} onChange={e=>setState(e.target.value)}>{point&&<option value="">{t('Any nearby state','Duk jihar da ke kusa')}</option>}{states.map(s=><option key={s}>{s}</option>)}</select></label>
       <label>{t('Facility type','Nau’in cibiyar')}<select value={category} onChange={e=>setCategory(e.target.value)}><option value="">{t('All facility types','Duk nau’o’i')}</option>{categoryEntries.map(([key,value])=><option key={key} value={key}>{t(...value as [string,string])}</option>)}</select></label></div>
@@ -134,7 +137,7 @@ export function FacilityDetails(){
   const {t}=useLanguage();
   const id=useSearchParams().get('id')||'';
   const [record,setRecord]=useState<Facility>(),[failure,setFailure]=useState(false),[point,setPoint]=useState<Point|null>(null);
-  const [route,setRoute]=useState(''),[routing,setRouting]=useState(false),[map,setMap]=useState(false);
+  const [route,setRoute]=useState(''),[routing,setRouting]=useState(false),[map,setMap]=useState(false),[originMap,setOriginMap]=useState(false);
   useEffect(()=>{api<Facility>('/facilities/'+encodeURIComponent(id)).then(setRecord).catch(()=>setFailure(true));},[id]);
   async function estimate(){
     setRouting(true);setRoute('');
@@ -150,9 +153,19 @@ export function FacilityDetails(){
       {[[t('Type','Nau’i'),categories[record.category as keyof typeof categories]?t(...categories[record.category as keyof typeof categories] as [string,string]):record.category],[t('Ward','Mazaba'),record.ward],[t('Postcode','Lambar gidan waya'),record.postcode],[t('Ownership','Mai cibiyar'),record.ownership],[t('Services','Ayyuka'),record.services],[t('Hours','Lokutan aiki'),record.hours]].map(([label,value])=><p key={label}><strong>{label}</strong> · {value||t('Unavailable','Babu bayani')}</p>)}
       <p><strong>{t('Verified phone','Tabbatacciyar lambar waya')}</strong> · {record.phone?<a href={'tel:'+record.phone.replace(/[^+0-9]/g,'')}>{record.phone}</a>:t('Unavailable','Babu bayani')}</p>
       {!demoMode&&<a className="button outline" href={record.source} rel="noreferrer">{t('View verification source','Duba tushen bayanai')}</a>}
-      </section><section className="card stack"><h2>{t('Road travel estimate','Ƙiyasin tafiya ta hanya')}</h2>
-      {demoMode?<p>{t('Road estimates require the hosted routing service.','Ƙiyasin hanya yana bukatar sabar hanyoyi.')}</p>:<><LocationFields point={point} onPoint={setPoint}/><button className="button primary" disabled={!point||routing} onClick={estimate}>{t('Estimate route','Ƙiyasta tafiya')}</button><Notice text={route}/></>}
-      {record.lat!==null&&record.lon!==null&&<><button className="button outline" onClick={()=>setMap(v=>!v)}>{t('Toggle map','Buɗe ko rufe taswira')}</button>{map&&<MapView point={point} onPick={setPoint} markers={[{lat:record.lat,lon:record.lon}]}/>}</>}
+      </section><section className="card stack"><h2>{t('Location','Wuri')}</h2>
+      {record.lat!==null&&record.lon!==null&&<>
+        <button className="button outline" type="button" aria-expanded={map} onClick={()=>setMap(v=>!v)}>{map?t('Hide satellite map','Ɓoye hoton tauraron ɗan adam'):t('Show satellite map','Nuna hoton tauraron ɗan adam')}</button>
+        {map&&<GoogleSatellite point={{lat:record.lat,lon:record.lon}} demo={demoMode}/>}
+      </>}
+      {!demoMode&&<><h2>{t('Road travel estimate','Ƙiyasin tafiya ta hanya')}</h2>
+        <LocationFields point={point} onPoint={setPoint}/>
+        {record.lat!==null&&record.lon!==null&&<>
+          <button className="button outline" type="button" aria-expanded={originMap} onClick={()=>setOriginMap(v=>!v)}>{originMap?t('Hide origin map','Ɓoye taswirar wurin farawa'):t('Choose a starting point on the map','Zaɓi wurin farawa a taswira')}</button>
+          {originMap&&<MapView point={point} onPick={setPoint} markers={[{lat:record.lat,lon:record.lon}]}/>}
+        </>}
+        <button className="button primary" disabled={!point||routing} onClick={estimate}>{t('Estimate route','Ƙiyasta tafiya')}</button><Notice text={route}/>
+      </>}
       </section></div></>}
   </div>;
 }

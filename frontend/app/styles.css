@@ -73,6 +73,7 @@ input[type=checkbox]{width:18px;min-height:18px;accent-color:var(--blue)}
 .notice{background:#e8f1ff;border-left:4px solid var(--blue);padding:11px 12px;overflow-wrap:anywhere}
 .error{background:#fff0eb;color:#852738;border-left-color:#ab3440}
 .map{width:100%;height:340px;overflow:hidden;border:1px solid var(--line);border-radius:12px}
+.map-embed{display:block}
 .map-pin,.map-marker{border-radius:100%;border:2px solid white;width:17px;height:17px;background:#1552a0;box-shadow:0 1px 6px #2a4770}
 .map-pin{background:#ae354b}
 .record{display:grid;gap:6px;border-top:1px solid var(--line);padding-block:12px;overflow-wrap:anywhere}
